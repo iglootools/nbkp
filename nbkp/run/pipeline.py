@@ -25,7 +25,7 @@ from nbkp.preflight import (
 )
 from nbkp.remote.dispatch import WhichFn
 from nbkp.sync.orchestration import RunOptions, run_all_syncs
-from nbkp.sync.results import SyncResult, result_severity
+from nbkp.sync.results import SyncOutcome, SyncResult, result_severity
 
 __all__ = [
     "PipelineResult",
@@ -49,6 +49,26 @@ class PipelineResult:
     has_sync_failures: bool
     """True when any result is fatal under the strictness (see ``sync_failed``);
     False when preflight aborted the run, as no sync ran."""
+
+    def attempted_sync_statuses(self) -> dict[str, SyncStatus]:
+        """
+        Return the preflight statuses of the syncs the run attempted.
+
+        Those that succeeded or failed in a step, whatever preflight said of them:
+        ``ignore-all`` also attempts broken syncs whose presence is proven, and a
+        cancelled or skipped sync runs nothing. ``run --dry-run`` previews the
+        commands of these syncs, the ones a real run would execute.
+        """
+        attempted = {
+            r.sync_slug
+            for r in self.results
+            if r.outcome in {SyncOutcome.SUCCESS, SyncOutcome.FAILED}
+        }
+        return {
+            slug: status
+            for slug, status in self.preflight.sync_statuses.items()
+            if slug in attempted
+        }
 
 
 @dataclass(frozen=True)

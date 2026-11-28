@@ -54,10 +54,8 @@ def _render(
     buf = StringIO()
     Console(file=buf, width=200, color_system=None).print(
         format_human_troubleshoot(
-            ssh or {},
-            vol_statuses,
-            {},
-            context=ctx or TroubleshootContext(config=config, invocation=Invocation()),
+            collect_issues(ssh or {}, vol_statuses, {}),
+            ctx or TroubleshootContext(config=config, invocation=Invocation()),
         ),
     )
     return buf.getvalue()
@@ -126,7 +124,7 @@ class TestSuggestedCommands:
             config,
             ctx,
         )
-        assert "nbkp disks mount -n usb -c nbkp/config.yaml -l home" in out
+        assert "nbkp disks mount -v usb -c nbkp/config.yaml -l home" in out
 
     def test_polkit_fix_uses_supplied_local_user(self) -> None:
         vol = LocalVolume(

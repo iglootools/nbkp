@@ -19,15 +19,16 @@ from rich.console import Console
 
 from nbkp.cli import app
 from nbkp.cliwiring.credentials import prompt_passphrase
-from nbkp.cliwiring.lock import hold_run_lock
 from nbkp.cliwiring.output_format import echo_json
 from nbkp.config import Config, CredentialProvider
 from nbkp.config.testkit import write_config
 from nbkp.disks import UmountResult
 from nbkp.policy import Strictness
 from nbkp.preflight import SyncErrorKind, SyncStatus
-from nbkp.run.cli.run_cmd import abort_message, run_json
+from nbkp.remote.dispatch import build_tool_lookup_args
+from nbkp.run.output import abort_message, run_json
 from nbkp.run.pipeline import PipelineResult
+from nbkp.runlock import hold_run_lock
 from nbkp.sync import ProgressMode, SyncFailureKind, SyncResult
 from tests.fakes import (
     BodyError,
@@ -44,6 +45,7 @@ from tests.fixtures.disks import (
     encrypted_volume,
     locked_drive_host,
     mounted_drive_host,
+    with_encrypted_volume,
 )
 from tests.fixtures.preflight import (
     preflight,
@@ -346,6 +348,8 @@ class TestRunCommand:
         assert exit_code == 0
         preview = output.index("[dry-run] Rsync commands:")
         assert preview < output.index("[dry-run] Sync results:")
+        # The panel holding them is a block of dry-run output too.
+        assert output.index("[dry-run] Sync Results") < preview
         assert "rsync " in output[preview:]
 
     def test_human_run_does_not_preview_the_commands(
@@ -380,7 +384,7 @@ class TestPreflightAbort:
     ) -> None:
         rsync = FakeRsync()
         rsync_missing = healthy_nas(
-            FakeCommandRunner().on("which", "rsync", returns=FAILS),
+            FakeCommandRunner().on(*build_tool_lookup_args("rsync"), returns=FAILS),
         )
 
         exit_code, output = _invoke(nas_config_file, run=rsync_missing, rsync=rsync)
@@ -419,7 +423,7 @@ class TestPreflightAbort:
         assert exit_code == 1
         assert "found errors in 1 sync:" in output
         assert "photos: source endpoint inactive" in output
-        assert "nbkp preflight troubleshoot -c conf/nbkp.yaml" in output
+        assert "nbkp preflight troubleshoot -S ignore-none -c conf/nbkp.yaml" in output
         assert rsync.calls == []
 
     def test_json_hint_carries_config_and_network_flags(
@@ -561,13 +565,38 @@ class TestRunLock:
         assert result.exit_code == 0, result.output
         assert lock.paths == [tmp_path / "state" / "nbkp" / "run.lock"]
 
-    def test_a_dry_run_that_mounts_takes_the_lock(self, nas_config_file: str) -> None:
+    def test_a_dry_run_that_mounts_takes_the_lock(self, tmp_path: Path) -> None:
+        config_path = write_config(tmp_path, with_encrypted_volume(nas_config()))
+        lock = FakeRunLock()
+        runtime = fake_runtime(
+            run=healthy_nas(mounted_drive_host(completed())),
+            run_lock=lock,
+        )
+
+        result = runner.invoke(
+            app,
+            ["run", "-c", str(config_path), "--dry-run"],
+            obj=runtime,
+        )
+
+        assert result.exit_code == 0, result.output
+        assert len(lock.paths) == 1
+
+    def test_a_dry_run_with_no_mount_managed_volume_does_not(
+        self,
+        nas_config_file: str,
+    ) -> None:
         lock = FakeRunLock()
         runtime = fake_runtime(run=healthy_nas(), run_lock=lock)
 
-        runner.invoke(app, ["run", "-c", nas_config_file, "--dry-run"], obj=runtime)
+        result = runner.invoke(
+            app,
+            ["run", "-c", nas_config_file, "--dry-run"],
+            obj=runtime,
+        )
 
-        assert len(lock.paths) == 1
+        assert result.exit_code == 0, result.output
+        assert lock.paths == []
 
     def test_a_dry_run_without_mount_or_umount_does_not(
         self,

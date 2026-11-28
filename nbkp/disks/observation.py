@@ -22,20 +22,12 @@ class MountObservation:
     mounted: bool | None = None
     cleartext_device: str | None = None
     effective_path: str | None = None
-    failure_reason: MountFailureKind | None = None
+    mount_failure_reason: MountFailureKind | None = None
     """Specific cause when the lifecycle step failed, for preflight to
-    upgrade the generic VOLUME_NOT_MOUNTED to a more actionable error."""
+    upgrade the generic VOLUME_NOT_MOUNTED to a more actionable error.
 
-    @property
-    def mount_failure_reason(self) -> MountFailureKind | None:
-        """
-        Alias of ``failure_reason``.
-
-        Mirrors ``MountCapabilities.mount_failure_reason`` so that the
-        ``MountStatusData`` protocol can expose a single accessor for
-        both pre-lifecycle and post-lifecycle status objects.
-        """
-        return self.failure_reason
+    Named as on ``MountCapabilities``, so that the ``MountStatusData`` protocol
+    reads both pre-lifecycle and post-lifecycle status objects alike."""
 
 
 def build_mount_observations(
@@ -56,7 +48,7 @@ def build_mount_observations(
             mounted=result.mounted,
             cleartext_device=result.cleartext_device,
             effective_path=result.effective_path,
-            failure_reason=result.failure_reason,
+            mount_failure_reason=result.failure_reason,
         )
         for result in mount_results
         if result.failure_reason is not MountFailureKind.UNREACHABLE

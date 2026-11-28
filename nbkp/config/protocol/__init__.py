@@ -5,6 +5,7 @@ from nbkp.config.protocol.config import Config, CredentialProvider, passphrase_e
 from nbkp.config.protocol.errors import ConfigValidationErrorKind
 from nbkp.config.protocol.ssh_endpoint import (
     DEFAULT_SSH_PORT,
+    LOCAL_HOST_SLUG,
     SshConnectionOptions,
     SshEndpoint,
 )
@@ -28,6 +29,7 @@ from nbkp.config.protocol.volume import (
 
 __all__ = [
     "DEFAULT_SSH_PORT",
+    "LOCAL_HOST_SLUG",
     "BtrfsSnapshotConfig",
     "Config",
     "ConfigModel",

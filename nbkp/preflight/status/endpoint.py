@@ -19,9 +19,12 @@ class SourceEndpointErrorKind(enum.StrEnum):
     """Why a source endpoint cannot be read from."""
 
     SENTINEL_NOT_FOUND = "sentinel-not-found"
+    # The sentinel may exist behind a directory nbkp cannot search.
+    SENTINEL_UNREADABLE = "sentinel-unreadable"
     SNAPSHOTS_DIR_NOT_FOUND = "snapshots-dir-not-found"
     LATEST_SYMLINK_NOT_FOUND = "latest-symlink-not-found"
     LATEST_SYMLINK_INVALID = "latest-symlink-invalid"
+    LATEST_SYMLINK_UNREADABLE = "latest-symlink-unreadable"
 
     # Cascade — lower layer inactive
     VOLUME_INACTIVE = "volume-inactive"
@@ -46,11 +49,14 @@ class DestinationEndpointErrorKind(enum.StrEnum):
     """
 
     SENTINEL_NOT_FOUND = "sentinel-not-found"
+    # The sentinel may exist behind a directory nbkp cannot search.
+    SENTINEL_UNREADABLE = "sentinel-unreadable"
     NOT_WRITABLE = "not-writable"
     SNAPSHOTS_DIR_NOT_FOUND = "snapshots-dir-not-found"
     SNAPSHOTS_DIR_NOT_WRITABLE = "snapshots-dir-not-writable"
     LATEST_SYMLINK_NOT_FOUND = "latest-symlink-not-found"
     LATEST_SYMLINK_INVALID = "latest-symlink-invalid"
+    LATEST_SYMLINK_UNREADABLE = "latest-symlink-unreadable"
     STAGING_SUBVOL_NOT_FOUND = "staging-subvol-not-found"
     STAGING_NOT_BTRFS_SUBVOLUME = "staging-not-btrfs-subvolume"
     STAGING_SUBVOL_NOT_WRITABLE = "staging-subvol-not-writable"
@@ -101,12 +107,16 @@ class LatestSymlinkState(BaseModel):
     exists: bool
     raw_target: str | None = None
     """Raw readlink value.  ``/dev/null``, a relative path, or ``None``
-    when the symlink is absent or unreadable."""
+    when the symlink is absent or unreadable (see ``unreadable``)."""
     target_valid: bool | None = None
     """Whether the target is an existing directory named like a snapshot.
     ``None`` when there is no symlink or target is ``/dev/null``."""
     snapshot: Snapshot | None = None
     """``None`` when target is ``/dev/null``, invalid, or absent."""
+    unreadable: str | None = None
+    """Why an existing symlink's target could not be read, or ``None`` when it
+    was read (or there is no symlink).  Unreadable is never "absent": the
+    symlink is there, so ``exists`` stays ``True``."""
 
 
 class BtrfsStagingSubvolumeDiagnostics(BaseModel):
@@ -154,6 +164,10 @@ class SourceEndpointDiagnostics(BaseModel):
 
     endpoint_slug: str
     sentinel_exists: bool
+    sentinel_unreadable: str | None = None
+    """Why the probe could not tell whether the sentinel exists (a directory on
+    its path is not searchable), or ``None`` when it could. When set, nothing
+    else was probed: every other field keeps its default."""
     snapshot_dirs: SnapshotDirsDiagnostics | None = None
     latest: LatestSymlinkState | None = None
 
@@ -171,6 +185,10 @@ class DestinationEndpointDiagnostics(BaseModel):
 
     endpoint_slug: str
     sentinel_exists: bool
+    sentinel_unreadable: str | None = None
+    """Why the probe could not tell whether the sentinel exists (a directory on
+    its path is not searchable), or ``None`` when it could. When set, nothing
+    else was probed: every other field keeps its default."""
     endpoint_writable: bool
     btrfs: BtrfsStagingSubvolumeDiagnostics | None = None
     snapshot_dirs: SnapshotDirsDiagnostics | None = None
@@ -290,6 +308,17 @@ def _source_endpoint_errors(
     diag: SourceEndpointDiagnostics,
     endpoint: SyncEndpoint,
 ) -> list[SourceEndpointErrorKind]:
+    return (
+        [SourceEndpointErrorKind.SENTINEL_UNREADABLE]
+        if diag.sentinel_unreadable is not None
+        else _observed_source_endpoint_errors(diag, endpoint)
+    )
+
+
+def _observed_source_endpoint_errors(
+    diag: SourceEndpointDiagnostics,
+    endpoint: SyncEndpoint,
+) -> list[SourceEndpointErrorKind]:
     return [
         *(
             [SourceEndpointErrorKind.SENTINEL_NOT_FOUND]
@@ -323,6 +352,8 @@ def _source_latest_ep_errors(
     latest = diag.latest
     if latest is None or not latest.exists:
         return [SourceEndpointErrorKind.LATEST_SYMLINK_NOT_FOUND]
+    elif latest.unreadable is not None:
+        return [SourceEndpointErrorKind.LATEST_SYMLINK_UNREADABLE]
     elif latest.raw_target == DEVNULL_TARGET:
         # /dev/null is structurally valid — interpretation deferred to sync
         return []
@@ -345,8 +376,23 @@ def _destination_endpoint_errors(
     approximated via ``sentinel_exists`` (the sentinel lives inside the endpoint dir, so
     its presence proves the dir exists). When the sentinel is missing we suppress
     NOT_WRITABLE because the ``test -w`` probe also fails on non-existent paths, and the
-    SENTINEL_NOT_FOUND fix already covers the "create the dir" case.
+    SENTINEL_NOT_FOUND fix already covers the "create the dir" case. A sentinel
+    nobody can tell the presence of gives ``SENTINEL_UNREADABLE`` alone, since
+    nothing else was probed.
     """
+    return (
+        [DestinationEndpointErrorKind.SENTINEL_UNREADABLE]
+        if diag.sentinel_unreadable is not None
+        else _observed_destination_endpoint_errors(diag, caps, host_tools, endpoint)
+    )
+
+
+def _observed_destination_endpoint_errors(
+    diag: DestinationEndpointDiagnostics,
+    caps: VolumeCapabilities | None,
+    host_tools: HostToolCapabilities | None,
+    endpoint: SyncEndpoint,
+) -> list[DestinationEndpointErrorKind]:
     return [
         *(
             [DestinationEndpointErrorKind.SENTINEL_NOT_FOUND]
@@ -492,6 +538,8 @@ def _destination_latest_ep_errors(
     latest = diag.latest
     if latest is None or not latest.exists:
         return [DestinationEndpointErrorKind.LATEST_SYMLINK_NOT_FOUND]
+    elif latest.unreadable is not None:
+        return [DestinationEndpointErrorKind.LATEST_SYMLINK_UNREADABLE]
     elif latest.target_valid is False:
         return [DestinationEndpointErrorKind.LATEST_SYMLINK_INVALID]
     else:

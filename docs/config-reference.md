@@ -147,7 +147,7 @@ Top-level config fields for credential retrieval:
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `credential-provider` | `"keyring"` \| `"prompt"` \| `"env"` \| `"command"` | `"keyring"` | How LUKS passphrases are retrieved |
-| `credential-command` | list of strings | `null` | Command template for `command` provider. Must contain `{id}` placeholder (e.g. `["pass", "show", "nbkp/{id}"]`) |
+| `credential-command` | list of strings | `null` | Command template for `command` provider. Must contain `{id}` placeholder (e.g. `["pass", "show", "nbkp/{id}"]`). A leading `~` in the program (the first item) is expanded |
 
 Providers:
 - **keyring**: `keyring.get_password("nbkp", passphrase_id)` — uses macOS Keychain or
@@ -298,7 +298,8 @@ activates snapshot creation after each successful sync.
 ## Syncs
 
 **Rsync options** — `compress` and `checksum` are opt-in flags.
-`default-options-override` replaces the default flags entirely; `extra-options`
+`default-options-override` replaces the default flags, but never the sentinel
+filters; `extra-options`
 appends flags after them. Why `--hard-links` is not a default:
 [Rsync Defaults](./internals.md#rsync-defaults).
 
@@ -336,7 +337,7 @@ Each destination endpoint can only be used by one sync (no two syncs may share t
 |---|---|---|---|
 | `compress` | boolean | `false` | Enable rsync `--compress` |
 | `checksum` | boolean | `false` | Enable rsync `--checksum` |
-| `default-options-override` | list of strings | `null` | Replace default rsync flags entirely |
+| `default-options-override` | list of strings | `null` | Replace the default rsync flags; the sentinel filters (`--filter=H .nbkp-*`, `--filter=P .nbkp-*`) are always kept |
 | `extra-options` | list of strings | `[]` | Additional flags appended after defaults |
 | `vanished-files` | `"fail"` \| `"warn"` | `"fail"` | What the sync does when files vanish from the source between rsync's scan and their transfer (rsync exit code 24). `fail`: the sync fails, and a new hard-link snapshot is discarded. `warn`: the sync succeeds with a `vanished-files` warning, its snapshot is kept and `latest` moves to it. Choose `warn` for a source in use while it is backed up, such as a home directory, where files often disappear mid-run |
 
@@ -345,6 +346,10 @@ Default rsync flags (when `default-options-override` is not set):
 ```
 -a --delete --delete-excluded --partial-dir=.rsync-partial --safe-links
 ```
+
+The sentinel filters `--filter=H .nbkp-*` and `--filter=P .nbkp-*` follow them
+in every sync, with or without `default-options-override`: they keep rsync from
+copying the source's sentinels or deleting the destination's.
 
 ---
 
@@ -404,6 +409,10 @@ Checked when the config is loaded, before anything runs:
 - An entry's slug is the key it is declared under. An entry may also write
   `slug`, but only with that same value: a different one is rejected
   (`slug-mismatch`), since some lookups go by key and others by slug.
+- No SSH endpoint may be named `localhost` (`reserved-slug`): preflight reports
+  the machine nbkp runs on under that name, and an endpoint sharing it would be
+  checked as the same host as the local volumes. The endpoint's `host` may
+  still be `localhost`.
 - Every key must be one this page documents: an unknown key, such as a misspelt
   `max-snapshot` or `hard-link-snapshot`, is rejected (`extra_forbidden`) with
   its location, rather than ignored while its section falls back to the
@@ -455,7 +464,7 @@ instead of the human-readable panel, and exits with code 2:
 ```
 
 A `--location` or `--exclude-location` value that no SSH endpoint declares, a
-`--sync` that names no sync, and a `disks --name` that names no volume are
+`--sync` that names no sync, and a `disks --volume` that names no volume are
 rejected the same way, once the config has loaded: exit code 2, and with
 `--output json` the error object
 `{"error": {"reason": "unknown-location", "message": ..., "names": [...]}}` (or

@@ -1,6 +1,7 @@
 """Shell command snippets that run on a volume's host (local or over SSH)."""
 
 from nbkp.config import LocalVolume, RemoteVolume
+from nbkp.remote.dispatch import build_tool_lookup_args
 from nbkp.remote.endpoints import ResolvedEndpoints
 from nbkp.remote.ssh import build_ssh_base_args
 from nbkp.sh.quoting import quote, quote_args, remote_command
@@ -37,8 +38,8 @@ def which_cmd(
         case LocalVolume():
             return f"command -v {quote(command)} >/dev/null 2>&1"
         case RemoteVolume():
-            which = vol_cmd(vol, ["which", command], resolved_endpoints)
-            return f"{which} >/dev/null 2>&1"
+            lookup = vol_cmd(vol, build_tool_lookup_args(command), resolved_endpoints)
+            return f"{lookup} >/dev/null 2>&1"
 
 
 def output_of(

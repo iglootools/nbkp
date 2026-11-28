@@ -31,6 +31,22 @@ DEVNULL_TARGET = "/dev/null"
 #: Directory name used as the btrfs staging subvolume for rsync writes.
 STAGING_DIR = "staging"
 
+#: Shell script run as ``sh -c NEAREST_DIR_SEARCHABLE_SCRIPT sh <path>`` after
+#: ``test -f <path>`` failed. ``test -f`` fails alike for a missing file and for
+#: one behind a directory the user cannot search, so the script climbs to the
+#: nearest existing ancestor: when that one is searchable the file is absent
+#: (exit 0), else nobody can tell (exit :data:`UNSEARCHABLE_EXIT`, the
+#: directory printed on stderr). Shared by preflight and the script ``sh``
+#: generates, so both read a sentinel the same way.
+NEAREST_DIR_SEARCHABLE_SCRIPT = (
+    'd=$(dirname -- "$1"); until test -d "$d"; do d=$(dirname -- "$d"); done; '
+    'test -x "$d" && exit 0; printf "%s\\n" "$d" >&2; exit 3'
+)
+
+#: Exit status of :data:`NEAREST_DIR_SEARCHABLE_SCRIPT` when the nearest
+#: existing directory cannot be searched; kept apart from ssh's 255.
+UNSEARCHABLE_EXIT = 3
+
 #: Filesystem types (as reported by ``stat -f -c %T``) that cannot hold hard links,
 #: so hard-link snapshots are rejected on them.
 NO_HARDLINK_FILESYSTEMS = ("vfat", "msdos", "exfat")

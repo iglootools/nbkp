@@ -11,7 +11,11 @@ import sys
 from dataclasses import dataclass
 
 from nbkp.config import LocalVolume, RemoteVolume, SshEndpoint
-from nbkp.remote.dispatch import check_command_available, run_on_volume
+from nbkp.remote.dispatch import (
+    build_tool_lookup_args,
+    check_command_available,
+    run_on_volume,
+)
 from nbkp.remote.endpoints import ResolvedEndpoint, ResolvedEndpoints
 from tests.fakes import FakeCommandRunner, completed
 
@@ -110,14 +114,14 @@ class TestCheckCommandAvailableLocal:
 
 class TestCheckCommandAvailableRemote:
     def test_command_found(self) -> None:
-        run = FakeCommandRunner().on("which", returns=completed(0))
+        run = FakeCommandRunner().on("sh", "-c", returns=completed(0))
         vol, resolved = _remote_volume()
         assert check_command_available(vol, "rsync", resolved, run=run) is True
-        assert run.commands == [["which", "rsync"]]
+        assert run.commands == [build_tool_lookup_args("rsync")]
         assert run.calls[0].volume == vol
 
     def test_command_not_found(self) -> None:
-        run = FakeCommandRunner().on("which", returns=completed(1))
+        run = FakeCommandRunner().on("sh", "-c", returns=completed(1))
         vol, resolved = _remote_volume()
         assert check_command_available(vol, "btrfs", resolved, run=run) is False
-        assert run.commands == [["which", "btrfs"]]
+        assert run.commands == [build_tool_lookup_args("btrfs")]

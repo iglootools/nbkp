@@ -173,6 +173,29 @@ class TestIgnoreAll:
 
         assert pipeline.has_sync_failures
 
+    def test_attempted_statuses_include_broken_syncs_ignore_all_runs(self) -> None:
+        """The dry-run preview lists them: a real run executes their commands."""
+        config = _chain_config()
+        statuses = {
+            "a": _infra_broken(_status(config, "a")),
+            "b": _status(config, "b"),
+        }
+
+        pipeline = _run(config, statuses, Strictness.IGNORE_ALL, FakeRsync())
+
+        assert list(pipeline.attempted_sync_statuses()) == ["a", "b"]
+
+    def test_attempted_statuses_leave_out_skipped_and_cancelled(self) -> None:
+        config = _chain_config()
+        statuses = {
+            "a": _status(config, "a", src_sentinel=False),
+            "b": _status(config, "b"),
+        }
+
+        pipeline = _run(config, statuses, Strictness.IGNORE_ALL, FakeRsync())
+
+        assert pipeline.attempted_sync_statuses() == {}
+
     def test_inactive_skip_is_not_a_failure(self) -> None:
         config = _chain_config()
         statuses = {

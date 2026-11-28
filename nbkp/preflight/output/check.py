@@ -5,7 +5,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from nbkp.config import Config, LocalVolume, RemoteVolume
+from nbkp.config import LOCAL_HOST_SLUG, Config, LocalVolume, RemoteVolume
 from nbkp.config.output import (
     format_mount_summary,
     format_volume_display,
@@ -42,16 +42,24 @@ def _format_latest(
     *,
     not_found: SourceEndpointErrorKind | DestinationEndpointErrorKind,
     invalid: SourceEndpointErrorKind | DestinationEndpointErrorKind,
+    unreadable: SourceEndpointErrorKind | DestinationEndpointErrorKind,
     strictness: Strictness,
 ) -> Text:
     """
     Format the ``latest`` symlink item.
 
     A missing ``latest`` is classified as *not_found*, one pointing at no snapshot as
-    *invalid*, under *strictness*: an error under the standard modes, a warning under
-    ``ignore-all``.
+    *invalid*, one that could not be read as *unreadable*, under *strictness*: an
+    error under the standard modes, a warning under ``ignore-all``.
     """
     match latest:
+        case LatestSymlinkState(unreadable=str()):
+            return check(
+                ok=False,
+                label="latest",
+                fail_error=unreadable,
+                strictness=strictness,
+            )
         case LatestSymlinkState(exists=True, raw_target=str() as target) if (
             target == DEVNULL_TARGET or latest.target_valid is True
         ):
@@ -120,6 +128,7 @@ def _format_source_diagnostics(ss: SyncStatus, strictness: Strictness) -> Text:
                     diag.latest,
                     not_found=SourceEndpointErrorKind.LATEST_SYMLINK_NOT_FOUND,
                     invalid=SourceEndpointErrorKind.LATEST_SYMLINK_INVALID,
+                    unreadable=SourceEndpointErrorKind.LATEST_SYMLINK_UNREADABLE,
                     strictness=strictness,
                 ),
             ]
@@ -218,6 +227,7 @@ def _destination_snapshot_items(
                     diag.latest,
                     not_found=DestinationEndpointErrorKind.LATEST_SYMLINK_NOT_FOUND,
                     invalid=DestinationEndpointErrorKind.LATEST_SYMLINK_INVALID,
+                    unreadable=DestinationEndpointErrorKind.LATEST_SYMLINK_UNREADABLE,
                     strictness=strictness,
                 ),
             ]
@@ -261,7 +271,7 @@ def _localhost_row(
     return (
         [
             (
-                "localhost",
+                LOCAL_HOST_SLUG,
                 Text("this machine", style="dim"),
                 "",
                 "",
@@ -281,7 +291,7 @@ def _build_ssh_endpoints_section(
     ssh_endpoint_statuses: dict[str, SshEndpointStatus],
     strictness: Strictness,
 ) -> list[RenderableType]:
-    localhost = _localhost_row(ssh_endpoint_statuses.get("localhost"), strictness)
+    localhost = _localhost_row(ssh_endpoint_statuses.get(LOCAL_HOST_SLUG), strictness)
     if not config.ssh_endpoints and not localhost:
         return []
     table = Table(title="SSH Endpoints:")
@@ -436,7 +446,7 @@ def format_human_check(
     sync_statuses: dict[str, SyncStatus],
     config: Config,
     *,
-    resolved_endpoints: ResolvedEndpoints | None = None,
+    resolved_endpoints: ResolvedEndpoints,
     wrap_in_panel: bool = True,
     strictness: Strictness = Strictness.IGNORE_INACTIVE,
     invocation: SuggestedCommands,
@@ -453,7 +463,7 @@ def format_human_check(
             vol_statuses,
             sync_statuses,
             config,
-            resolved_endpoints or {},
+            resolved_endpoints,
             strictness=strictness,
         ),
         *_troubleshoot_hint(ssh_statuses, sync_statuses, invocation),
@@ -488,7 +498,7 @@ def _troubleshoot_hint(
             Text(""),
             Text.assemble(
                 "Run ",
-                (invocation.command("preflight", "troubleshoot"), "bold"),
+                (invocation.troubleshoot_command(), "bold"),
                 " for detailed remediation steps.",
             ),
         ]

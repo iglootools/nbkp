@@ -111,9 +111,9 @@ is still going exits 1 at once, before mounting anything, with
 work. The other commands that mount or umount drives or delete snapshots
 (`disks mount` and `umount`, `snapshots show` and `prune`, `preflight check` and
 `troubleshoot`) take the same lock and fail the same way while a run is going,
-and a run fails while one of them is; dry runs and checks with
-`--no-mount --no-umount` run alongside anything. A generated script shares the
-same lock where `flock` is installed. See
+and a run fails while one of them is; dry runs and checks that mount no drive
+(no mount-managed volume in scope, or `--no-mount`) run alongside anything. A
+generated script shares the same lock where `flock` is installed. See
 [The Run Lock](./internals.md#the-run-lock).
 
 ## Config
@@ -265,9 +265,9 @@ keyring set nbkp backup-drives
 # at /run/media/<user>/<label> and nbkp discovers the path at runtime.
 
 # 4. Generate and install the polkit authorization rule
-nbkp disks setup-auth -c config.yaml
-# Review output, then install the single block to:
-#   /etc/polkit-1/rules.d/50-nbkp.rules
+nbkp disks setup-auth -c config.yaml > 50-nbkp.rules
+# Review the file, then install it:
+sudo install -m 0644 50-nbkp.rules /etc/polkit-1/rules.d/50-nbkp.rules
 
 # 5. Create sentinel files
 touch /mnt/seagate8tb/.nbkp-vol /mnt/iomega1tb/.nbkp-vol /mnt/usb-plain/.nbkp-vol
@@ -286,8 +286,8 @@ nbkp run
 nbkp run --no-mount --no-umount
 
 # Manually mount/umount specific volumes
-nbkp disks mount --name seagate8tb
-nbkp disks umount --name seagate8tb
+nbkp disks mount --volume seagate8tb
+nbkp disks umount --volume seagate8tb
 
 # Diagnose mount issues
 nbkp preflight troubleshoot
@@ -345,9 +345,9 @@ udisks2 installed and running.
    unconditionally so the unattended path works. Generate and install it with:
 
    ```bash
-   nbkp disks setup-auth -c config.yaml
-   # Review the output, then install the single block to:
-   #   /etc/polkit-1/rules.d/50-nbkp.rules
+   nbkp disks setup-auth -c config.yaml > 50-nbkp.rules
+   # Review the file, then install it:
+   sudo install -m 0644 50-nbkp.rules /etc/polkit-1/rules.d/50-nbkp.rules
    ```
 
    `--user` is the user nbkp runs as on the host (the SSH user for remote
@@ -478,8 +478,8 @@ nbkp run
 nbkp run --no-mount --no-umount
 
 # Manually mount/umount specific volumes
-nbkp disks mount --name seagate8tb
-nbkp disks umount --name seagate8tb
+nbkp disks mount --volume seagate8tb
+nbkp disks umount --volume seagate8tb
 
 # Diagnose mount issues (udisksd down, missing polkit rule, fstab mismatch, …)
 nbkp preflight troubleshoot
@@ -506,12 +506,12 @@ nbkp preflight troubleshoot
   provider configuration.
 - **All passphrases are read up front, even for absent drives.** Before probing
   any device, nbkp retrieves every passphrase-id in the config — including
-  drives that are not plugged in and volumes `--name` excluded. OS secret stores
-  re-prompt for approval after the accessing binary changes (a Python or nbkp
-  upgrade), so reading them all means one interactive run grants approval for
-  every drive and later runs stay unattended. Failures are warnings, not errors:
-  a missing passphrase only breaks a drive that is actually present, and the
-  mount step reports that. The `prompt` provider is not prefetched. Run
+  drives that are not plugged in and volumes `--volume` excluded. OS secret
+  stores re-prompt for approval after the accessing binary changes (a Python or
+  nbkp upgrade), so reading them all means one interactive run grants approval
+  for every drive and later runs stay unattended. Failures are warnings, not
+  errors: a missing passphrase only breaks a drive that is actually present, and
+  the mount step reports that. The `prompt` provider is not prefetched. Run
   `nbkp credentials keyring-status` to trigger the approval pass on demand,
   without mounting anything. See
   [Why prefetch every passphrase](./internals.md#why-prefetch-every-passphrase).

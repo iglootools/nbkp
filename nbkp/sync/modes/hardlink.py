@@ -34,7 +34,20 @@ def run_hard_link_sync(
     transfer into a snapshot directory that is never created.
     """
     sync = status.config
-    warnings = () if ctx.dry_run else _cleanup_orphans(sync, ctx)
+    match () if ctx.dry_run else _cleanup_orphans(sync, ctx):
+        case SyncResult() as failure:
+            return failure
+        case warnings:
+            return _sync_into_new_snapshot(status, dst, warnings, ctx)
+
+
+def _sync_into_new_snapshot(
+    status: SyncStatus,
+    dst: SyncEndpoint,
+    warnings: tuple[SyncWarning, ...],
+    ctx: RunContext,
+) -> SyncResult:
+    sync = status.config
     latest = status.destination_latest_snapshot
     link_dest = hard_link_link_dest(latest.name if latest else None)
     match _prepare_snapshot_dir(sync, latest, ctx):
@@ -51,8 +64,19 @@ def run_hard_link_sync(
             )
 
 
-def _cleanup_orphans(sync: SyncConfig, ctx: RunContext) -> tuple[SyncWarning, ...]:
-    """Remove snapshots left by failed syncs (best-effort: a warning)."""
+def _cleanup_orphans(
+    sync: SyncConfig,
+    ctx: RunContext,
+) -> tuple[SyncWarning, ...] | SyncResult:
+    """
+    Remove the snapshots left by failed syncs.
+
+    An orphan that cannot be deleted fails the sync before a new snapshot is made:
+    the new one would move ``latest`` past the orphan, which orphan cleanup then
+    never looks at again, and retention and ``snapshots show`` would count the
+    incomplete tree as a backup. When orphans cannot be looked for (``latest`` absent,
+    a listing that failed), nothing was deleted, and the sync goes on with a warning.
+    """
     try:
         cleanup_orphaned_snapshots(
             sync,
@@ -61,7 +85,16 @@ def _cleanup_orphans(sync: SyncConfig, ctx: RunContext) -> tuple[SyncWarning, ..
             run=ctx.run_command,
         )
     except SnapshotOperationError as e:
-        return (SyncWarning.snapshot_failed(SyncWarningKind.ORPHAN_CLEANUP, e),)
+        match e.op:
+            case SnapshotOp.DELETE:
+                return SyncResult.failed(
+                    sync.slug,
+                    dry_run=ctx.dry_run,
+                    failure=SyncFailureKind.ORPHAN_CLEANUP,
+                    detail=f"Failed to remove an orphaned snapshot: {e}",
+                )
+            case _:
+                return (SyncWarning.snapshot_failed(SyncWarningKind.ORPHAN_CLEANUP, e),)
     else:
         return ()
 
@@ -75,11 +108,11 @@ def _prepare_snapshot_dir(
     Return the new snapshot's path, created on disk unless dry-running.
 
     A snapshot that would not come after *latest* is refused (see
-    :func:`~nbkp.snapshots.common.ensure_after_latest`).
+    :func:`~nbkp.snapshots.common.ensure_after_latest`), in a dry run too: the
+    check only reads, and a dry run must not report success for a run that will
+    be refused.
     """
     now = ctx.clock()
-    if ctx.dry_run:
-        return snapshot_path_for(sync, ctx.config, now=now, platform=ctx.platform)
     try:
         ensure_after_latest(
             sync,
@@ -89,13 +122,17 @@ def _prepare_snapshot_dir(
             latest=latest,
             op=SnapshotOp.MKDIR,
         )
-        return create_snapshot_dir(
-            sync,
-            ctx.config,
-            now=now,
-            platform=ctx.platform,
-            resolved_endpoints=ctx.resolved_endpoints,
-            run=ctx.run_command,
+        return (
+            snapshot_path_for(sync, ctx.config, now=now, platform=ctx.platform)
+            if ctx.dry_run
+            else create_snapshot_dir(
+                sync,
+                ctx.config,
+                now=now,
+                platform=ctx.platform,
+                resolved_endpoints=ctx.resolved_endpoints,
+                run=ctx.run_command,
+            )
         )
     except SnapshotOperationError as e:
         return SyncResult.failed(
@@ -142,8 +179,9 @@ def _discard_snapshot_dir(
     """
     Remove a snapshot directory a failed sync left, warning when that fails.
 
-    A leftover is harmless (the next run's orphan cleanup removes it), so a failure is a
-    warning. Dry runs never created the directory.
+    A leftover is harmless: the next run's orphan cleanup removes it, or fails that
+    run before ``latest`` can move past it. So a failure here is a warning. Dry runs
+    never created the directory.
     """
     if ctx.dry_run:
         return ()

@@ -18,9 +18,15 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
+from nbkp.remote.dispatch import build_tool_lookup_args
 from nbkp.remote.endpoints import EndpointFilter
 from nbkp.remote.resolution import resolve_all_endpoints
+from nbkp.runlock import resolve_run_lock_path
 from nbkp.sh import ScriptOptions, VolumeWithoutPathError, generate_script
+from nbkp.sh.quoting import quote, remote_command
+from nbkp.sh.spec import build_sync_spec
+from nbkp.sh.steps import Step, build_steps
+from tests.fixtures.config import two_volume_config
 
 _NOW = datetime(2026, 2, 21, 12, 0, 0, tzinfo=UTC)
 _OPTIONS = ScriptOptions(platform="linux", config_path="/etc/nbkp/config.yaml")
@@ -38,22 +44,12 @@ def _bash_n(script: str) -> None:
 
 
 def _local_to_local_config() -> Config:
-    src = LocalVolume(slug="src", path="/mnt/src")
-    dst = LocalVolume(slug="dst", path="/mnt/dst")
-    return Config(
-        volumes={"src": src, "dst": dst},
-        sync_endpoints={
-            "ep-src": SyncEndpoint(slug="ep-src", volume="src", subdir="photos"),
-            "ep-dst": SyncEndpoint(slug="ep-dst", volume="dst", subdir="backup"),
-        },
-        syncs={
-            "my-sync": SyncConfig(
-                slug="my-sync",
-                source="ep-src",
-                destination="ep-dst",
-            ),
-        },
+    _, config = two_volume_config(
+        slug="my-sync",
+        src_subdir="photos",
+        dst_subdir="backup",
     )
+    return config
 
 
 def _local_to_remote_config() -> Config:
@@ -121,49 +117,19 @@ def _remote_to_local_config() -> Config:
 
 
 def _btrfs_config() -> Config:
-    src = LocalVolume(slug="src", path="/mnt/src")
-    dst = LocalVolume(slug="dst", path="/mnt/dst")
-    return Config(
-        volumes={"src": src, "dst": dst},
-        sync_endpoints={
-            "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
-            "ep-dst": SyncEndpoint(
-                slug="ep-dst",
-                volume="dst",
-                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True, max_snapshots=5),
-            ),
-        },
-        syncs={
-            "btrfs-sync": SyncConfig(
-                slug="btrfs-sync",
-                source="ep-src",
-                destination="ep-dst",
-            ),
-        },
+    _, config = two_volume_config(
+        slug="btrfs-sync",
+        dst_btrfs=BtrfsSnapshotConfig(enabled=True, max_snapshots=5),
     )
+    return config
 
 
 def _btrfs_no_prune_config() -> Config:
-    src = LocalVolume(slug="src", path="/mnt/src")
-    dst = LocalVolume(slug="dst", path="/mnt/dst")
-    return Config(
-        volumes={"src": src, "dst": dst},
-        sync_endpoints={
-            "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
-            "ep-dst": SyncEndpoint(
-                slug="ep-dst",
-                volume="dst",
-                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-            ),
-        },
-        syncs={
-            "btrfs-sync": SyncConfig(
-                slug="btrfs-sync",
-                source="ep-src",
-                destination="ep-dst",
-            ),
-        },
+    _, config = two_volume_config(
+        slug="btrfs-sync",
+        dst_btrfs=BtrfsSnapshotConfig(enabled=True),
     )
+    return config
 
 
 def _btrfs_chain_config() -> Config:
@@ -202,44 +168,17 @@ def _btrfs_chain_config() -> Config:
 
 
 def _disabled_config() -> Config:
-    src = LocalVolume(slug="src", path="/mnt/src")
-    dst = LocalVolume(slug="dst", path="/mnt/dst")
-    return Config(
-        volumes={"src": src, "dst": dst},
-        sync_endpoints={
-            "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
-            "ep-dst": SyncEndpoint(slug="ep-dst", volume="dst"),
-        },
-        syncs={
-            "disabled-sync": SyncConfig(
-                slug="disabled-sync",
-                source="ep-src",
-                destination="ep-dst",
-                enabled=False,
-            ),
-        },
-    )
+    _, config = two_volume_config(slug="disabled-sync", enabled=False)
+    return config
 
 
 def _filters_config() -> Config:
-    src = LocalVolume(slug="src", path="/mnt/src")
-    dst = LocalVolume(slug="dst", path="/mnt/dst")
-    return Config(
-        volumes={"src": src, "dst": dst},
-        sync_endpoints={
-            "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
-            "ep-dst": SyncEndpoint(slug="ep-dst", volume="dst"),
-        },
-        syncs={
-            "filtered-sync": SyncConfig(
-                slug="filtered-sync",
-                source="ep-src",
-                destination="ep-dst",
-                filters=["+ *.jpg", "- *.tmp", "H .git"],
-                filter_file="~/.config/nbkp/filters.rules",
-            ),
-        },
+    _, config = two_volume_config(
+        slug="filtered-sync",
+        filters=["+ *.jpg", "- *.tmp", "H .git"],
+        filter_file="~/.config/nbkp/filters.rules",
     )
+    return config
 
 
 def _proxy_jump_config() -> Config:
@@ -326,28 +265,28 @@ def _proxy_jumps_config() -> Config:
 class TestHeader:
     def test_script_starts_with_bash_shebang(self) -> None:
         config = _local_to_local_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         assert script.startswith("#!/bin/bash\n")
 
     def test_strict_mode(self) -> None:
         config = _local_to_local_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         assert "set -euo pipefail" in script
         assert "IFS=$'\\n\\t'" in script
 
     def test_config_path_in_header(self) -> None:
         config = _local_to_local_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         assert "# Config: /etc/nbkp/config.yaml" in script
 
     def test_timestamp_in_header(self) -> None:
         config = _local_to_local_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         assert "2026-02-21T12:00:00Z" in script
 
     def test_preserved_dropped_comments(self) -> None:
         config = _local_to_local_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         assert "# Preserved from nbkp run:" in script
         assert "# Dropped from nbkp run:" in script
         assert "rsync command variants" in script
@@ -355,7 +294,7 @@ class TestHeader:
 
     def test_arg_parsing(self) -> None:
         config = _local_to_local_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         assert "NBKP_DRY_RUN=false" in script
         assert 'NBKP_PROGRESS=""' in script
         assert "-n|--dry-run" in script
@@ -363,12 +302,12 @@ class TestHeader:
 
     def test_nbkp_log_helper(self) -> None:
         config = _local_to_local_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         assert "nbkp_log()" in script
 
     def test_nbkp_log_dry_run_tag(self) -> None:
         config = _local_to_local_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         assert "[nbkp] [dry-run]" in script
         assert '"[nbkp] $*"' in script
 
@@ -376,7 +315,7 @@ class TestHeader:
 class TestVolumeChecks:
     def test_local_volume_check(self) -> None:
         config = _local_to_local_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         assert "test -f /mnt/src/.nbkp-vol" in script
         assert "test -f /mnt/dst/.nbkp-vol" in script
 
@@ -396,19 +335,19 @@ class TestVolumeChecks:
 class TestLocalToLocal:
     def test_rsync_command(self) -> None:
         config = _local_to_local_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         assert "rsync" in script
         assert "/mnt/src/photos/" in script
         assert "/mnt/dst/backup/" in script
 
     def test_function_name(self) -> None:
         config = _local_to_local_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         assert "sync_my_sync()" in script
 
     def test_sync_invocation(self) -> None:
         config = _local_to_local_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         assert 'nbkp_run_sync my-sync sync_my_sync "$NBKP_PF_sync_my_sync"\n' in script
 
 
@@ -510,7 +449,10 @@ class TestArguments:
 
     @pytest.mark.parametrize("flag", ["-h", "--help"])
     def test_help_flag_prints_usage(self, flag: str) -> None:
-        result = _run_script(generate_script(Config(), _OPTIONS, now=_NOW), flag)
+        result = _run_script(
+            generate_script(Config(), _OPTIONS, now=_NOW, resolved_endpoints={}),
+            flag,
+        )
         assert result.returncode == 0, result.stderr
         assert "Usage: " in result.stdout
         assert "--strictness LEVEL" in result.stdout
@@ -526,7 +468,10 @@ class TestArguments:
         ],
     )
     def test_usage_error_exits_2(self, args: list[str], message: str) -> None:
-        result = _run_script(generate_script(Config(), _OPTIONS, now=_NOW), *args)
+        result = _run_script(
+            generate_script(Config(), _OPTIONS, now=_NOW, resolved_endpoints={}),
+            *args,
+        )
         assert result.returncode == 2
         assert f"Error: {message}" in result.stderr
         assert "--help" in result.stderr
@@ -535,22 +480,23 @@ class TestArguments:
 class TestDisabledSync:
     def test_commented_out(self) -> None:
         config = _disabled_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         assert "# : disabled" in script
         assert "# sync_disabled_sync()" in script
 
     def test_disabled_invocation_commented(self) -> None:
         config = _disabled_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         assert "# sync_disabled_sync  # disabled" in script
 
 
 _SYMLINK_STEP = dedent("""\
     # Update latest symlink (skip if dry-run)
     if [ "$NBKP_DRY_RUN" = false ]; then
-        ln -sfn "snapshots/${NBKP_TS}" /mnt/dst/latest
+        ln -sfn "snapshots/${NBKP_TS}" "/mnt/dst/.latest.nbkp-tmp-${$}"
+        mv -f -T "/mnt/dst/.latest.nbkp-tmp-${$}" /mnt/dst/latest || { rm -f "/mnt/dst/.latest.nbkp-tmp-${$}"; false; }
     fi
-""")
+""")  # noqa: E501 -- the generated script, line for line
 """The whole step: ``snapshots/${NBKP_TS}`` and the dry-run guard also
 appear in other steps, so matching them alone could not fail."""
 
@@ -558,12 +504,12 @@ appear in other steps, so matching them alone could not fail."""
 class TestBtrfs:
     def test_no_link_dest(self) -> None:
         config = _btrfs_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         assert "RSYNC_LINK_DEST" not in script
 
     def test_snapshot_creation(self) -> None:
         config = _btrfs_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         assert "btrfs" in script
         assert "subvolume" in script
         assert "snapshot" in script
@@ -573,19 +519,19 @@ class TestBtrfs:
     def test_snapshot_guarded_by_dry_run(self) -> None:
         """The whole step: the guard also appears in other steps."""
         config = _btrfs_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         step = dedent("""\
             # Btrfs snapshot (skip if dry-run)
-            if [ "$NBKP_DRY_RUN" = false ]; then
-                NBKP_TS=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)
-                NBKP_LATEST_LINK=$(readlink /mnt/dst/latest 2>/dev/null || true)
-                if [ -n "$NBKP_LATEST_LINK" ] && [ "$NBKP_LATEST_LINK" != "/dev/null" ]; then
-                    NBKP_LATEST_NAME="${NBKP_LATEST_LINK##*/}"
-                    if ! nbkp_snapshot_after "$NBKP_TS" "$NBKP_LATEST_NAME"; then
-                        nbkp_log "ERROR: new snapshot $NBKP_TS would not be after the latest snapshot $NBKP_LATEST_NAME; is the clock behind?"
-                        return 1
-                    fi
+            NBKP_TS=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)
+            NBKP_LATEST_LINK=$(readlink /mnt/dst/latest 2>/dev/null || true)
+            if [ -n "$NBKP_LATEST_LINK" ] && [ "$NBKP_LATEST_LINK" != "/dev/null" ]; then
+                NBKP_LATEST_NAME="${NBKP_LATEST_LINK##*/}"
+                if ! nbkp_snapshot_after "$NBKP_TS" "$NBKP_LATEST_NAME"; then
+                    nbkp_log "ERROR: new snapshot $NBKP_TS would not be after the latest snapshot $NBKP_LATEST_NAME; is the clock behind?"
+                    return 1
                 fi
+            fi
+            if [ "$NBKP_DRY_RUN" = false ]; then
                 btrfs subvolume snapshot -r /mnt/dst/staging "/mnt/dst/snapshots/${NBKP_TS}"
             fi
         """)  # noqa: E501 -- the generated script, line for line
@@ -593,7 +539,7 @@ class TestBtrfs:
 
     def test_prune_with_max_snapshots(self) -> None:
         config = _btrfs_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         assert "Prune old snapshots" in script
         assert "max: 5" in script
         assert "NBKP_EXCESS" in script
@@ -605,18 +551,18 @@ class TestBtrfs:
 
     def test_no_prune_without_max(self) -> None:
         config = _btrfs_no_prune_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         assert "Prune old snapshots" not in script
 
     def test_tmp_and_snapshots_dir_checks(self) -> None:
         config = _btrfs_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         assert "staging/ directory not found" in script
         assert "snapshots/ directory not found" in script
 
     def test_symlink_update_after_snapshot_guarded_by_dry_run(self) -> None:
         config = _btrfs_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         assert indent(_SYMLINK_STEP, "    ") in script
         assert script.index("# Btrfs snapshot") < script.index(
             "# Update latest symlink",
@@ -626,32 +572,32 @@ class TestBtrfs:
 class TestPreflightChecks:
     def test_source_sentinel(self) -> None:
         config = _local_to_local_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         assert ".nbkp-src" in script
         assert "source sentinel" in script
 
     def test_destination_sentinel(self) -> None:
         config = _local_to_local_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         assert ".nbkp-dst" in script
         assert "destination sentinel" in script
 
     def test_rsync_availability(self) -> None:
         config = _local_to_local_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         assert "command -v rsync" in script
         assert "rsync not found" in script
 
     def test_btrfs_availability(self) -> None:
         config = _btrfs_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         assert "command -v btrfs" in script
         assert "btrfs not found" in script
 
     def test_source_latest_symlink_check(self) -> None:
         """Source latest check uses test -L (symlink), not -d."""
         config = _btrfs_chain_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         assert "test -L" in script
         assert "latest symlink not found" in script
 
@@ -667,23 +613,35 @@ class TestPreflightChecks:
         assert "ssh" in script
         assert ".nbkp-dst" in script
 
+    def test_remote_tool_check_asks_the_remote_shell_builtin(self) -> None:
+        config = _local_to_remote_config()
+        resolved = resolve_all_endpoints(config)
+        script = generate_script(
+            config,
+            _OPTIONS,
+            now=_NOW,
+            resolved_endpoints=resolved,
+        )
+        lookup = quote(remote_command(build_tool_lookup_args("rsync")))
+        assert lookup in script
+
 
 class TestDryRunAndProgress:
     def test_dry_run_flag_injected(self) -> None:
         config = _local_to_local_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         assert "RSYNC_DRY_RUN_FLAG" in script
         assert '${RSYNC_DRY_RUN_FLAG:+"$RSYNC_DRY_RUN_FLAG"}' in script
 
     def test_progress_flags_injected(self) -> None:
         config = _local_to_local_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         assert "RSYNC_PROGRESS_FLAGS" in script
         assert '${RSYNC_PROGRESS_FLAGS[@]+"${RSYNC_PROGRESS_FLAGS[@]}"}' in script
 
     def test_progress_modes(self) -> None:
         config = _local_to_local_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         assert "overall" in script
         assert "per-file" in script
         assert "--info=progress2" in script
@@ -693,14 +651,14 @@ class TestDryRunAndProgress:
 class TestFilters:
     def test_filter_args_present(self) -> None:
         config = _filters_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         assert "--filter=+ *.jpg" in script
         assert "--filter=- *.tmp" in script
         assert "--filter=H .git" in script
 
     def test_filter_file_present(self) -> None:
         config = _filters_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         expanded = str(Path("~/.config/nbkp/filters.rules").expanduser())
         assert f"--filter=merge {expanded}" in script
 
@@ -817,7 +775,7 @@ class TestSshConnectionOptions:
 class TestShellValidity:
     def test_local_to_local_valid_syntax(self) -> None:
         config = _local_to_local_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         _bash_n(script)
 
     def test_local_to_remote_valid_syntax(self) -> None:
@@ -844,17 +802,17 @@ class TestShellValidity:
 
     def test_btrfs_valid_syntax(self) -> None:
         config = _btrfs_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         _bash_n(script)
 
     def test_disabled_valid_syntax(self) -> None:
         config = _disabled_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         _bash_n(script)
 
     def test_filters_valid_syntax(self) -> None:
         config = _filters_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         _bash_n(script)
 
     def test_proxy_jump_valid_syntax(self) -> None:
@@ -885,7 +843,12 @@ class TestEdgeCases:
             VolumeWithoutPathError,
             check=lambda e: e.volume_slug == "dst",
         ):
-            generate_script(mount_managed_config(), _OPTIONS, now=_NOW)
+            generate_script(
+                mount_managed_config(),
+                _OPTIONS,
+                now=_NOW,
+                resolved_endpoints={},
+            )
 
     def test_unused_volume_without_path_is_ignored(self) -> None:
         config = _local_to_local_config()
@@ -896,7 +859,7 @@ class TestEdgeCases:
         config = config.model_copy(
             update={"volumes": {**config.volumes, "spare": spare}},
         )
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         assert "sync_my_sync()" in script
         _bash_n(script)
 
@@ -904,7 +867,7 @@ class TestEdgeCases:
         config = mount_managed_config()
         sync = config.syncs["my-sync"].model_copy(update={"enabled": False})
         config = config.model_copy(update={"syncs": {"my-sync": sync}})
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         assert "# : disabled — my-sync (not rendered: volume dst has no 'path')" in (
             script
         )
@@ -913,7 +876,7 @@ class TestEdgeCases:
 
     def test_empty_config(self) -> None:
         config = Config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         assert "#!/bin/bash" in script
         assert "All syncs completed successfully" in script
         _bash_n(script)
@@ -943,30 +906,19 @@ class TestEdgeCases:
                 ),
             },
         )
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         assert "# : disabled" in script
         assert "# sync_s_one" in script
         assert "# sync_s_two" in script
         _bash_n(script)
 
     def test_paths_with_spaces(self) -> None:
-        src = LocalVolume(slug="src", path="/mnt/my data")
-        dst = LocalVolume(slug="dst", path="/mnt/my backup")
-        config = Config(
-            volumes={"src": src, "dst": dst},
-            sync_endpoints={
-                "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
-                "ep-dst": SyncEndpoint(slug="ep-dst", volume="dst"),
-            },
-            syncs={
-                "space-sync": SyncConfig(
-                    slug="space-sync",
-                    source="ep-src",
-                    destination="ep-dst",
-                ),
-            },
+        _, config = two_volume_config(
+            slug="space-sync",
+            src=LocalVolume(slug="src", path="/mnt/my data"),
+            dst=LocalVolume(slug="dst", path="/mnt/my backup"),
         )
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         assert "'/mnt/my data/'" in script
         assert "'/mnt/my backup/'" in script
         _bash_n(script)
@@ -974,33 +926,23 @@ class TestEdgeCases:
     def test_no_config_path(self) -> None:
         config = _local_to_local_config()
         options = ScriptOptions(platform="linux", config_path=None)
-        script = generate_script(config, options, now=_NOW)
+        script = generate_script(config, options, now=_NOW, resolved_endpoints={})
         assert "# Config: <stdin>" in script
 
     def test_custom_rsync_options(self) -> None:
-        src = LocalVolume(slug="src", path="/mnt/src")
-        dst = LocalVolume(slug="dst", path="/mnt/dst")
-        config = Config(
-            volumes={"src": src, "dst": dst},
-            sync_endpoints={
-                "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
-                "ep-dst": SyncEndpoint(slug="ep-dst", volume="dst"),
-            },
-            syncs={
-                "custom-sync": SyncConfig(
-                    slug="custom-sync",
-                    source="ep-src",
-                    destination="ep-dst",
-                    rsync_options=RsyncOptions(
-                        default_options_override=["-a", "--delete"],
-                        extra_options=["--bwlimit=1000", "--progress"],
-                    ),
-                ),
-            },
+        _, config = two_volume_config(
+            slug="custom-sync",
+            rsync_options=RsyncOptions(
+                default_options_override=["-a", "--delete"],
+                extra_options=["--bwlimit=1000", "--progress"],
+            ),
         )
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         assert "--bwlimit=1000" in script
         assert "--progress" in script
+        # The override replaces the transfer flags, never the sentinel filters.
+        assert "--filter=H .nbkp-*" in script
+        assert "--filter=P .nbkp-*" in script
 
     def test_mixed_enabled_disabled(self) -> None:
         src = LocalVolume(slug="src", path="/mnt/src")
@@ -1026,7 +968,7 @@ class TestEdgeCases:
                 ),
             },
         )
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         assert "sync_active_sync()" in script
         assert "# : disabled — off-sync" in script
         assert (
@@ -1040,7 +982,7 @@ class TestEdgeCases:
 class TestSummary:
     def test_failure_count_and_exit(self) -> None:
         config = _local_to_local_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         assert 'nbkp_log "$NBKP_FAILURES sync(s) failed"' in script
         assert "exit 1" in script
         assert "All syncs completed successfully" in script
@@ -1095,51 +1037,18 @@ class TestRemoteBtrfs:
 
 class TestHardLink:
     def _hl_config(self) -> Config:
-        src = LocalVolume(slug="src", path="/mnt/src")
-        dst = LocalVolume(slug="dst", path="/mnt/dst")
-        return Config(
-            volumes={"src": src, "dst": dst},
-            sync_endpoints={
-                "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
-                "ep-dst": SyncEndpoint(
-                    slug="ep-dst",
-                    volume="dst",
-                    hard_link_snapshots=HardLinkSnapshotConfig(
-                        enabled=True,
-                        max_snapshots=5,
-                    ),
-                ),
-            },
-            syncs={
-                "hl-sync": SyncConfig(
-                    slug="hl-sync",
-                    source="ep-src",
-                    destination="ep-dst",
-                ),
-            },
+        _, config = two_volume_config(
+            slug="hl-sync",
+            dst_hard_link=HardLinkSnapshotConfig(enabled=True, max_snapshots=5),
         )
+        return config
 
     def _hl_no_prune_config(self) -> Config:
-        src = LocalVolume(slug="src", path="/mnt/src")
-        dst = LocalVolume(slug="dst", path="/mnt/dst")
-        return Config(
-            volumes={"src": src, "dst": dst},
-            sync_endpoints={
-                "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
-                "ep-dst": SyncEndpoint(
-                    slug="ep-dst",
-                    volume="dst",
-                    hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
-                ),
-            },
-            syncs={
-                "hl-sync": SyncConfig(
-                    slug="hl-sync",
-                    source="ep-src",
-                    destination="ep-dst",
-                ),
-            },
+        _, config = two_volume_config(
+            slug="hl-sync",
+            dst_hard_link=HardLinkSnapshotConfig(enabled=True),
         )
+        return config
 
     def _hl_remote_config(self) -> Config:
         server = SshEndpoint(
@@ -1179,7 +1088,7 @@ class TestHardLink:
     def test_orphan_cleanup(self) -> None:
         """The whole step: other steps also emit readlink/latest/"/dev/null"."""
         config = self._hl_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         step = dedent("""\
             # Cleanup orphaned snapshots
             if [ "$NBKP_DRY_RUN" = false ]; then
@@ -1190,7 +1099,7 @@ class TestHardLink:
                         if [ "$NBKP_LATEST_LINK" = "/dev/null" ] \\
                             || nbkp_snapshot_after "$snap" "$NBKP_LATEST_NAME"; then
                             nbkp_log "Removing orphaned snapshot: $snap"
-                            rm -rf "/mnt/dst/snapshots/${snap}" || nbkp_log "WARN: failed to remove orphaned snapshot: $snap"
+                            { rm -rf "/mnt/dst/snapshots/${snap}" || { find "/mnt/dst/snapshots/${snap}" -type d '!' -perm -0700 -exec chmod u+rwx '{}' ';' && rm -rf "/mnt/dst/snapshots/${snap}"; }; } || { nbkp_log "ERROR: failed to remove orphaned snapshot: $snap"; false; }
                         fi
                     done
                 fi
@@ -1200,7 +1109,7 @@ class TestHardLink:
 
     def test_rejects_filesystems_without_hard_links(self) -> None:
         config = self._hl_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         checks = dedent("""\
             NBKP_DST_FS_TYPE="$(stat -f -c %T /mnt/dst 2>/dev/null || true)"
             [ -n "$NBKP_DST_FS_TYPE" ] || { nbkp_log 'ERROR: could not determine the filesystem type of destination volume /mnt/dst'; return 1; }
@@ -1211,65 +1120,76 @@ class TestHardLink:
     def test_reads_the_filesystem_type_with_df_and_mount_on_macos(self) -> None:
         config = self._hl_config()
         options = ScriptOptions(platform="darwin", config_path=None)
-        script = generate_script(config, options, now=_NOW)
+        script = generate_script(config, options, now=_NOW, resolved_endpoints={})
         assert 'NBKP_DST_FS_TYPE="$(nbkp_macos_fs_type /mnt/dst)"' in script
         assert "stat -f -c %T" not in script
 
     def test_link_dest_resolution(self) -> None:
         config = self._hl_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         assert "RSYNC_LINK_DEST" in script
         assert "--link-dest" in script
 
     def test_mkdir_snapshot_dir(self) -> None:
         config = self._hl_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         assert "mkdir -p /mnt/dst/snapshots\n" in script
         # Plain mkdir: an existing snapshot dir must fail the sync.
         assert 'mkdir "/mnt/dst/snapshots/${NBKP_TS}"' in script
 
     def test_rsync_to_snapshot(self) -> None:
         config = self._hl_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         assert "/mnt/dst/snapshots/${NBKP_TS}/" in script
 
     def test_symlink_update_guarded_by_dry_run(self) -> None:
         config = self._hl_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         assert indent(_SYMLINK_STEP, "    ") in script
+
+    def test_symlink_rename_does_not_follow_latest_on_darwin(self) -> None:
+        """BSD mv spells GNU's -T as -h: never move the link into the snapshot."""
+        options = ScriptOptions(platform="darwin", config_path="c.yaml")
+        script = generate_script(
+            self._hl_config(),
+            options,
+            now=_NOW,
+            resolved_endpoints={},
+        )
+        assert 'mv -f -h "/mnt/dst/.latest.nbkp-tmp-${$}" /mnt/dst/latest' in script
 
     def test_prune_with_max_snapshots(self) -> None:
         config = self._hl_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         assert "Prune old snapshots" in script
         assert "max: 5" in script
         assert "rm -rf" in script
 
     def test_no_prune_without_max(self) -> None:
         config = self._hl_no_prune_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         assert "Prune old snapshots" not in script
 
     def test_no_btrfs_commands(self) -> None:
         config = self._hl_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         assert "btrfs subvolume" not in script
         assert "btrfs property" not in script
 
     def test_snapshots_dir_preflight_check(self) -> None:
         config = self._hl_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         assert "snapshots/ directory not found" in script
 
     def test_devnull_guard_in_prune(self) -> None:
         config = self._hl_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         assert '= "/dev/null"' in script
         assert 'NBKP_LATEST_NAME=""' in script
 
     def test_valid_syntax(self) -> None:
         config = self._hl_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         _bash_n(script)
 
     def test_remote_valid_syntax(self) -> None:
@@ -1307,7 +1227,7 @@ class TestRelativePaths:
             output_file="/mnt/dst/backup.sh",
             relative_dst=True,
         )
-        script = generate_script(config, options, now=_NOW)
+        script = generate_script(config, options, now=_NOW, resolved_endpoints={})
         assert "/mnt/src/photos/" in script
         assert "${NBKP_SCRIPT_DIR}" in script
         assert "/mnt/dst/backup/" not in script
@@ -1320,7 +1240,7 @@ class TestRelativePaths:
             output_file="/mnt/src/backup.sh",
             relative_src=True,
         )
-        script = generate_script(config, options, now=_NOW)
+        script = generate_script(config, options, now=_NOW, resolved_endpoints={})
         assert "${NBKP_SCRIPT_DIR}" in script
         assert "/mnt/dst/backup/" in script
 
@@ -1333,7 +1253,7 @@ class TestRelativePaths:
             relative_src=True,
             relative_dst=True,
         )
-        script = generate_script(config, options, now=_NOW)
+        script = generate_script(config, options, now=_NOW, resolved_endpoints={})
         assert "${NBKP_SCRIPT_DIR}" in script
         assert "/mnt/src/photos/" not in script
         assert "/mnt/dst/backup/" not in script
@@ -1374,13 +1294,13 @@ class TestRelativePaths:
             output_file="/mnt/dst/backup.sh",
             relative_dst=True,
         )
-        script = generate_script(config, options, now=_NOW)
+        script = generate_script(config, options, now=_NOW, resolved_endpoints={})
         assert "NBKP_SCRIPT_DIR=" in script
         assert "BASH_SOURCE[0]" in script
 
     def test_no_script_dir_when_absolute(self) -> None:
         config = _local_to_local_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         assert "NBKP_SCRIPT_DIR" not in script
 
     def test_relative_shell_valid(self) -> None:
@@ -1391,7 +1311,7 @@ class TestRelativePaths:
             output_file="/mnt/dst/backup.sh",
             relative_dst=True,
         )
-        script = generate_script(config, options, now=_NOW)
+        script = generate_script(config, options, now=_NOW, resolved_endpoints={})
         _bash_n(script)
 
     def test_relative_both_shell_valid(self) -> None:
@@ -1403,7 +1323,7 @@ class TestRelativePaths:
             relative_src=True,
             relative_dst=True,
         )
-        script = generate_script(config, options, now=_NOW)
+        script = generate_script(config, options, now=_NOW, resolved_endpoints={})
         _bash_n(script)
 
     def test_relative_btrfs(self) -> None:
@@ -1414,7 +1334,7 @@ class TestRelativePaths:
             output_file="/mnt/dst/backup.sh",
             relative_dst=True,
         )
-        script = generate_script(config, options, now=_NOW)
+        script = generate_script(config, options, now=_NOW, resolved_endpoints={})
         assert "${NBKP_SCRIPT_DIR}" in script
         # Btrfs snapshot uses relative dest paths
         assert "btrfs" in script
@@ -1431,7 +1351,7 @@ class TestRelativePaths:
             output_file="/mnt/dst/backup.sh",
             relative_dst=True,
         )
-        script = generate_script(config, options, now=_NOW)
+        script = generate_script(config, options, now=_NOW, resolved_endpoints={})
         assert "${NBKP_SCRIPT_DIR}" in script
         assert "test -f /mnt/src/.nbkp-vol" in script
 
@@ -1443,7 +1363,7 @@ class TestRelativePaths:
             output_file="/mnt/dst/backup.sh",
             relative_dst=True,
         )
-        script = generate_script(config, options, now=_NOW)
+        script = generate_script(config, options, now=_NOW, resolved_endpoints={})
         assert "/mnt/src/photos/.nbkp-src" in script
         assert ".nbkp-dst" in script
 
@@ -1473,7 +1393,7 @@ class TestDependencyGuard:
                 ),
             },
         )
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         # step-1 has no upstream syncs
         assert 'nbkp_run_sync step-1 sync_step_1 "$NBKP_PF_sync_step_1"\n' in script
         # step-2 lists upstream step-1, so it is cancelled when step-1 fails
@@ -1483,7 +1403,7 @@ class TestDependencyGuard:
 
     def test_independent_syncs_no_guard(self) -> None:
         config = _local_to_local_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         assert 'nbkp_run_sync my-sync sync_my_sync "$NBKP_PF_sync_my_sync"\n' in script
 
     def test_dependency_guard_valid_syntax(self) -> None:
@@ -1510,7 +1430,7 @@ class TestDependencyGuard:
                 ),
             },
         )
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         _bash_n(script)
 
 
@@ -1544,19 +1464,34 @@ class TestNoPortable:
 
     def test_uses_declare_a(self) -> None:
         opts = ScriptOptions(platform="linux", config_path="test.yaml", portable=False)
-        script = generate_script(self._chain_config(), opts, now=_NOW)
+        script = generate_script(
+            self._chain_config(),
+            opts,
+            now=_NOW,
+            resolved_endpoints={},
+        )
         assert "declare -A NBKP_FAILED=()" in script
         assert 'NBKP_FAILED=" "' not in script
 
     def test_associative_array_guard(self) -> None:
         opts = ScriptOptions(platform="linux", config_path="test.yaml", portable=False)
-        script = generate_script(self._chain_config(), opts, now=_NOW)
+        script = generate_script(
+            self._chain_config(),
+            opts,
+            now=_NOW,
+            resolved_endpoints={},
+        )
         assert "NBKP_FAILED[$1]=1" in script
         assert '${NBKP_FAILED[$1]+set}" = "set"' in script
 
     def test_valid_bash_syntax(self) -> None:
         opts = ScriptOptions(platform="linux", config_path="test.yaml", portable=False)
-        script = generate_script(self._chain_config(), opts, now=_NOW)
+        script = generate_script(
+            self._chain_config(),
+            opts,
+            now=_NOW,
+            resolved_endpoints={},
+        )
         _bash_n(script)
 
     def test_simple_sync_uses_associative_array(
@@ -1564,7 +1499,7 @@ class TestNoPortable:
     ) -> None:
         config = _local_to_local_config()
         opts = ScriptOptions(platform="linux", config_path="test.yaml", portable=False)
-        script = generate_script(config, opts, now=_NOW)
+        script = generate_script(config, opts, now=_NOW, resolved_endpoints={})
         assert "declare -A NBKP_FAILED=()" in script
         assert "NBKP_FAILED[$1]=1" in script
 
@@ -1631,7 +1566,12 @@ class TestBtrfsPruneFailedDelete:
         """)
 
     def _run_delete(self, *, delete_rc: int, restore_rc: int) -> list[str]:
-        script = generate_script(_btrfs_config(), _OPTIONS, now=_NOW)
+        script = generate_script(
+            _btrfs_config(),
+            _OPTIONS,
+            now=_NOW,
+            resolved_endpoints={},
+        )
         [delete_line] = [
             line.strip()
             for line in script.splitlines()
@@ -1675,7 +1615,12 @@ class TestBtrfsLatestReadOnlyWarning:
     """Preflight warns, without failing, when ``latest``'s snapshot is writable."""
 
     def _run(self, *, latest: str, ro: str) -> list[str]:
-        script = generate_script(_btrfs_config(), _OPTIONS, now=_NOW)
+        script = generate_script(
+            _btrfs_config(),
+            _OPTIONS,
+            now=_NOW,
+            resolved_endpoints={},
+        )
         [line] = [
             line.strip() for line in script.splitlines() if "not read-only" in line
         ]
@@ -1748,7 +1693,7 @@ class TestRemoteCommandQuoting:
             },
             syncs={"s": SyncConfig(slug="s", source="ep-src", destination="ep-dst")},
         )
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         assert (
             'nbkp_log \'INACTIVE: source sentinel /mnt/a "b" $c/.nbkp-src not found'
             in script
@@ -1759,7 +1704,12 @@ class TestRemoteCommandQuoting:
 
 class TestPreflightParity:
     def test_volume_sentinels_gate_sync(self) -> None:
-        script = generate_script(_local_to_local_config(), _OPTIONS, now=_NOW)
+        script = generate_script(
+            _local_to_local_config(),
+            _OPTIONS,
+            now=_NOW,
+            resolved_endpoints={},
+        )
         assert (
             "test -f /mnt/src/.nbkp-vol || { nbkp_log 'INACTIVE: source volume"
             in script
@@ -1769,31 +1719,50 @@ class TestPreflightParity:
         )
 
     def test_rsync_version_checked(self) -> None:
-        script = generate_script(_local_to_local_config(), _OPTIONS, now=_NOW)
+        script = generate_script(
+            _local_to_local_config(),
+            _OPTIONS,
+            now=_NOW,
+            resolved_endpoints={},
+        )
         assert (
             'nbkp_rsync_version_ok "$(rsync --version 2>/dev/null || true)"' in script
         )
 
     def test_btrfs_destination_checks(self) -> None:
-        script = generate_script(_btrfs_config(), _OPTIONS, now=_NOW)
+        script = generate_script(
+            _btrfs_config(),
+            _OPTIONS,
+            now=_NOW,
+            resolved_endpoints={},
+        )
         assert "user_subvol_rm_allowed" in script
         assert "is not a btrfs subvolume" in script
         assert "not on btrfs filesystem" in script
         assert "destination latest symlink not found" in script
 
     def test_source_devnull_with_upstream_is_pending_in_dry_run(self) -> None:
-        script = generate_script(_btrfs_chain_config(), _OPTIONS, now=_NOW)
+        script = generate_script(
+            _btrfs_chain_config(),
+            _OPTIONS,
+            now=_NOW,
+            resolved_endpoints={},
+        )
         assert "source snapshot not yet available (dry-run" in script
-        assert "with no upstream sync" not in script
 
     def test_source_devnull_without_upstream_is_broken(self) -> None:
         config = _btrfs_chain_config()
         config = config.model_copy(update={"syncs": {"step-2": config.syncs["step-2"]}})
-        script = generate_script(config, _OPTIONS, now=_NOW)
+        script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         assert "source latest -> /dev/null with no upstream sync" in script
 
     def test_preflight_runs_before_syncs_with_strictness(self) -> None:
-        script = generate_script(_local_to_local_config(), _OPTIONS, now=_NOW)
+        script = generate_script(
+            _local_to_local_config(),
+            _OPTIONS,
+            now=_NOW,
+            resolved_endpoints={},
+        )
         preflight = script.index("sync_my_sync_preflight && NBKP_PF_sync_my_sync=0")
         enforce = script.index('nbkp_enforce_strictness "$NBKP_PF_sync_my_sync"')
         run = script.index("nbkp_run_sync my-sync")
@@ -1802,32 +1771,59 @@ class TestPreflightParity:
         assert "--strictness|-S)" in script
 
 
+def _btrfs_steps() -> tuple[Step, ...]:
+    config = _btrfs_config()
+    vol_paths = {"src": "/mnt/src", "dst": "/mnt/dst"}
+    return build_steps(build_sync_spec("btrfs-sync", config, vol_paths, {}, "linux"))
+
+
 class TestSyncSteps:
-    def test_btrfs_has_no_link_dest_step(self) -> None:
-        script = generate_script(_btrfs_config(), _OPTIONS, now=_NOW)
-        assert "Link-dest resolution" not in script
+    """
+    The steps' structure; what the script does is run in integration_fs/test_sh.py.
 
-    def test_rsync_failure_returns_before_snapshot(self) -> None:
-        script = generate_script(_btrfs_config(), _OPTIONS, now=_NOW)
-        rsync_check = script.index('if [ "$NBKP_RSYNC_RC" -ne 0 ]; then')
-        snapshot = script.index("# Btrfs snapshot")
-        assert rsync_check < snapshot
-        assert "|| NBKP_RSYNC_RC=$?" in script
+    Asserted on ``build_steps`` rather than on text absent from the rendered
+    script, which rewording a step would make pass whatever the script does.
+    """
 
-    def test_vanished_files_fail_by_default(self) -> None:
-        script = generate_script(_btrfs_config(), _OPTIONS, now=_NOW)
-        assert '"$NBKP_RSYNC_RC" -eq 24' not in script
+    def test_btrfs_steps_have_no_link_dest_resolution(self) -> None:
+        assert [step.title for step in _btrfs_steps()] == [
+            "Rsync",
+            "Btrfs snapshot (skip if dry-run)",
+            "Update latest symlink (skip if dry-run)",
+            "Prune old snapshots (max: 5)",
+        ]
+
+    def test_rsync_step_returns_on_failure_before_the_snapshot_step(self) -> None:
+        rsync, snapshot, *_ = _btrfs_steps()
+        assert rsync.title == "Rsync"
+        assert "|| NBKP_RSYNC_RC=$?" in rsync.body
+        assert 'if [ "$NBKP_RSYNC_RC" -ne 0 ]; then' in rsync.body
+        assert snapshot.title.startswith("Btrfs snapshot")
 
     def test_hard_link_failure_removes_new_snapshot(self) -> None:
         script = _remote_script("hard-link")
-        assert "\"rm -rf '/srv/back ups/hl/snapshots/${NBKP_TS}'\" || true" in script
+        removal = next(
+            line for line in script.splitlines() if "snapshots/${NBKP_TS}'\" ||" in line
+        )
+        assert "\"rm -rf '/srv/back ups/hl/snapshots/${NBKP_TS}'\"" in removal
+        assert removal.endswith("|| true")
 
     def test_sync_runs_in_errexit_subshell(self) -> None:
-        script = generate_script(_local_to_local_config(), _OPTIONS, now=_NOW)
+        script = generate_script(
+            _local_to_local_config(),
+            _OPTIONS,
+            now=_NOW,
+            resolved_endpoints={},
+        )
         assert '( set -e; "$fn" )' in script
 
     def test_prune_skips_latest_before_counting(self) -> None:
-        script = generate_script(_btrfs_config(), _OPTIONS, now=_NOW)
+        script = generate_script(
+            _btrfs_config(),
+            _OPTIONS,
+            now=_NOW,
+            resolved_endpoints={},
+        )
         limit = script.index('[ "$NBKP_PRUNED" -lt "$NBKP_EXCESS" ] || break')
         skip = script.index('[ "$snap" != "$NBKP_LATEST_NAME" ] || continue')
         increment = script.index("NBKP_PRUNED=$((NBKP_PRUNED + 1))")
@@ -1835,12 +1831,58 @@ class TestSyncSteps:
 
     def test_darwin_local_timestamps_avoid_colons(self) -> None:
         options = ScriptOptions(platform="darwin", config_path="c.yaml")
-        script = generate_script(_btrfs_config(), options, now=_NOW)
+        script = generate_script(
+            _btrfs_config(),
+            options,
+            now=_NOW,
+            resolved_endpoints={},
+        )
         assert "NBKP_TS=$(date -u +%Y-%m-%dT%H-%M-%S.000Z)" in script
 
 
 def test_config_path_cannot_inject_shell_lines() -> None:
     options = ScriptOptions(platform="linux", config_path="/tmp/x\nrm -rf ~\n.yaml")  # noqa: S108 -- data only, never written
-    script = generate_script(_local_to_local_config(), options, now=_NOW)
+    script = generate_script(
+        _local_to_local_config(),
+        options,
+        now=_NOW,
+        resolved_endpoints={},
+    )
     assert "# Config: /tmp/x\\nrm -rf ~\\n.yaml\n" in script
     assert "\nrm -rf ~" not in script
+
+
+class TestRunLockPath:
+    """The script locks the same file as ``nbkp run`` (``resolve_run_lock_path``)."""
+
+    def _script_lock_path(self, environ: dict[str, str]) -> str:
+        lines = generate_script(
+            _local_to_local_config(),
+            _OPTIONS,
+            now=_NOW,
+            resolved_endpoints={},
+        ).splitlines()
+        start = next(i for i, line in enumerate(lines) if '"${XDG_STATE_HOME' in line)
+        end = next(i for i in range(start, len(lines)) if lines[i].strip() == "esac")
+        block = "\n".join([*lines[start : end + 1], 'printf %s "$NBKP_RUN_LOCK"'])
+        result = subprocess.run(
+            ["bash", "-c", block],
+            env=environ,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return result.stdout
+
+    @pytest.mark.parametrize(
+        "environ",
+        [
+            {"HOME": "/home/alice", "XDG_STATE_HOME": "/var/state"},
+            {"HOME": "/home/alice"},
+            {"HOME": "/home/alice", "XDG_STATE_HOME": ""},
+            {"HOME": "/home/alice", "XDG_STATE_HOME": "relative/state"},
+        ],
+    )
+    def test_lock_path_matches_nbkp_run(self, environ: dict[str, str]) -> None:
+        expected = resolve_run_lock_path(environ, Path(environ["HOME"]))
+        assert self._script_lock_path(environ) == str(expected)

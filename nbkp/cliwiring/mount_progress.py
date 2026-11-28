@@ -1,7 +1,7 @@
 """
 Progress display for the credential → mount → umount lifecycle.
 
-Shared by ``disks mount`` / ``disks umount`` and the ``managed_mount``
+Shared by ``disks mount`` / ``disks umount`` and the ``managed_mount_or_exit``
 context manager used by ``run`` / ``preflight`` / ``snapshots``, which used
 to each carry their own copy of these callbacks.
 """

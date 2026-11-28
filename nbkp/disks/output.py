@@ -257,8 +257,12 @@ def _umount_failure_detail(reason: UmountFailureKind, failure: LifecycleFailure)
             return _probe_failed(failure)
         case UmountFailureKind.UNREACHABLE:
             return f"unreachable: {failure.message}"
-        case UmountFailureKind.UDISKS_NOT_AVAILABLE:
+        case UmountFailureKind.UDISKS_NOT_AVAILABLE if failure.step is None:
             return f"udisks2 not available: {failure.command} not found"
+        case UmountFailureKind.UDISKS_NOT_AVAILABLE:
+            return f"{_step(failure)} failed — udisks2 not available: {failure.message}"
+        case UmountFailureKind.NOT_AUTHORIZED:
+            return f"{_step(failure)} not authorized — polkit rule not configured"
         case UmountFailureKind.UNMOUNT_FAILED | UmountFailureKind.LOCK_FAILED:
             return _step_failed(failure)
 
@@ -272,6 +276,8 @@ def umount_failure_warning(result: UmountResult) -> str | None:
             return "device may still be mounted, manual umount needed"
         case UmountFailureKind.LOCK_FAILED:
             return "LUKS container still unlocked, manual lock needed"
+        case UmountFailureKind.NOT_AUTHORIZED:
+            return "volume may still be mounted or unlocked, manual umount needed"
         case UmountFailureKind.PROBE_FAILED:
             return "volume may still be mounted or unlocked, check manually"
         case UmountFailureKind.UNREACHABLE | UmountFailureKind.UDISKS_NOT_AVAILABLE:

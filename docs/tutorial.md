@@ -566,10 +566,8 @@ the backup user the udisks actions unconditionally. Generate it
 
 ```bash
 # On the laptop, generate the rule for the Pi's backup user (-u ubuntu).
-# setup-auth prints a short human-readable header (lines starting with `#`)
-# above the rule; strip it so the saved file is a clean polkit rule.
-nbkp disks setup-auth -c ~/.config/nbkp/config.yaml -u ubuntu \
-  | grep -v '^#' > 50-nbkp.rules
+# Only the rule goes to stdout; where to install it is printed on stderr.
+nbkp disks setup-auth -c ~/.config/nbkp/config.yaml -u ubuntu > 50-nbkp.rules
 scp 50-nbkp.rules ubuntu@10.0.0.42:/tmp/
 
 # On the Pi:
@@ -737,8 +735,8 @@ nbkp run
 nbkp run --location home            # prefer the home-LAN endpoint
 nbkp run --exclude-location home    # on the road: skip anything only reachable at home
 nbkp run --no-mount --no-umount     # volumes are already mounted; skip mount management
-nbkp disks mount   --name seagate8tb    # mount one drive by hand
-nbkp disks umount  --name seagate8tb
+nbkp disks mount   --volume seagate8tb  # mount one drive by hand
+nbkp disks umount  --volume seagate8tb
 ```
 
 Inactive syncs (a drive that isn't plugged in, a hub that's unreachable) are

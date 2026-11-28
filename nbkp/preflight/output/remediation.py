@@ -185,6 +185,60 @@ def _sentinel_fix(
     ]
 
 
+def _sentinel_unreadable_fix(
+    vol: LocalVolume | RemoteVolume,
+    path: str,
+    sentinel_name: str,
+    ctx: TroubleshootContext,
+) -> Lines:
+    """
+    Explain a sentinel hidden behind a directory nbkp cannot search.
+
+    Not a missing sentinel: creating one could shadow a sentinel that is
+    already there, so the fix is access, not ``touch``.
+    """
+    return [
+        format_line(
+            FIX,
+            "Cannot tell whether ",
+            f"{path}/{sentinel_name}",
+            " exists: a directory on its path is not searchable by the user nbkp"
+            " runs as. Find it with:",
+        ),
+        format_command(wrap_cmd(["ls", "-ld", path], vol, ctx.resolved_endpoints)),
+        format_line(FIX, "Then give that user access to it, for instance:"),
+        *_chown(vol, path, ctx),
+    ]
+
+
+def _latest_unreadable_fix(
+    vol: LocalVolume | RemoteVolume,
+    path: str,
+    ctx: TroubleshootContext,
+) -> Lines:
+    """
+    Explain a ``latest`` symlink that is there but could not be read.
+
+    Not a missing one: resetting it blindly could point it away from the
+    snapshot it names, so the fix starts by looking at it.
+    """
+    latest = f"{path}/{LATEST_LINK}"
+    return [
+        format_line(
+            FIX,
+            "The ",
+            latest,
+            " symlink exists but its target could not be read. Inspect it:",
+        ),
+        format_command(wrap_cmd(["ls", "-l", latest], vol, ctx.resolved_endpoints)),
+        format_line(
+            FIX,
+            "Then make it readable by the user nbkp runs as, or replace it"
+            " with a symlink to the newest snapshot.",
+        ),
+    ]
+
+
 _NEWEST_SNAPSHOT_PLACEHOLDER = "<newest-snapshot>"
 
 
@@ -527,11 +581,18 @@ def format_volume_error_fix(
     match error:
         case VolumeErrorKind.SENTINEL_NOT_FOUND:
             return _sentinel_fix(vol, vol.path or "<volume-path>", VOLUME_SENTINEL, ctx)
+        case VolumeErrorKind.SENTINEL_UNREADABLE:
+            return _sentinel_unreadable_fix(
+                vol,
+                vol.path or "<volume-path>",
+                VOLUME_SENTINEL,
+                ctx,
+            )
         case VolumeErrorKind.VOLUME_NOT_MOUNTED:
             return [
                 format_line(FIX, "Volume is not mounted. Mount it with:"),
                 format_command(
-                    ctx.invocation.command("disks", "mount", "-n", vol_status.slug),
+                    ctx.invocation.command("disks", "mount", "-v", vol_status.slug),
                     STEP,
                 ),
             ]
@@ -931,6 +992,10 @@ def format_source_endpoint_error_fix(
     match error:
         case SourceEndpointErrorKind.SENTINEL_NOT_FOUND:
             return _sentinel_fix(src_vol, path, SOURCE_SENTINEL, ctx)
+        case SourceEndpointErrorKind.SENTINEL_UNREADABLE:
+            return _sentinel_unreadable_fix(src_vol, path, SOURCE_SENTINEL, ctx)
+        case SourceEndpointErrorKind.LATEST_SYMLINK_UNREADABLE:
+            return _latest_unreadable_fix(src_vol, path, ctx)
         case SourceEndpointErrorKind.LATEST_SYMLINK_NOT_FOUND:
             return [
                 format_line(
@@ -973,11 +1038,13 @@ def format_destination_endpoint_error_fix(
     match error:
         case (
             DestinationEndpointErrorKind.SENTINEL_NOT_FOUND
+            | DestinationEndpointErrorKind.SENTINEL_UNREADABLE
             | DestinationEndpointErrorKind.NOT_WRITABLE
             | DestinationEndpointErrorKind.SNAPSHOTS_DIR_NOT_FOUND
             | DestinationEndpointErrorKind.SNAPSHOTS_DIR_NOT_WRITABLE
             | DestinationEndpointErrorKind.LATEST_SYMLINK_NOT_FOUND
             | DestinationEndpointErrorKind.LATEST_SYMLINK_INVALID
+            | DestinationEndpointErrorKind.LATEST_SYMLINK_UNREADABLE
             | DestinationEndpointErrorKind.VOLUME_INACTIVE
         ):
             return _destination_layout_fix(error, dst_vol, path, dst_ep.slug, ctx)
@@ -1039,6 +1106,8 @@ def _destination_layout_fix(
     match error:
         case DestinationEndpointErrorKind.SENTINEL_NOT_FOUND:
             return _sentinel_fix(vol, path, DESTINATION_SENTINEL, ctx)
+        case DestinationEndpointErrorKind.SENTINEL_UNREADABLE:
+            return _sentinel_unreadable_fix(vol, path, DESTINATION_SENTINEL, ctx)
         case DestinationEndpointErrorKind.NOT_WRITABLE:
             return [
                 format_line(
@@ -1084,6 +1153,8 @@ def _destination_layout_fix(
                 ),
                 *_reset_latest(vol, path, endpoint_slug, ctx),
             ]
+        case DestinationEndpointErrorKind.LATEST_SYMLINK_UNREADABLE:
+            return _latest_unreadable_fix(vol, path, ctx)
         case _:
             return [format_line(FIX, "Fix the volume errors reported above.")]
 

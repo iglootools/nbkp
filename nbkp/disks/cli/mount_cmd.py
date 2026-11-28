@@ -5,10 +5,8 @@ from typing import Annotated
 
 import typer
 from rich.console import Console
-from rich.text import Text
 
 from nbkp.cliwiring.config import load_config_or_exit, resolve_endpoints
-from nbkp.cliwiring.disks import require_known_names, show_plan, show_volume_statuses
 from nbkp.cliwiring.invocation import Invocation, format_troubleshoot_hint
 from nbkp.cliwiring.lock import run_lock_or_exit
 from nbkp.cliwiring.mount import lifecycle_session
@@ -23,9 +21,11 @@ from nbkp.cliwiring.options import (
 from nbkp.cliwiring.output_format import OutputFormat
 from nbkp.cliwiring.runtime import Runtime, runtime_of
 from nbkp.config import Config
-from nbkp.disks.cli.options import NAME_OPTION
+from nbkp.disks.cli.common import require_known_names, show_plan, show_volume_statuses
+from nbkp.disks.cli.hints import print_auth_hint
+from nbkp.disks.cli.options import VOLUME_OPTION
 from nbkp.disks.context import mount_phase
-from nbkp.disks.lifecycle import MountResult, any_failed, refused_by_polkit
+from nbkp.disks.lifecycle import MountResult, any_failed
 from nbkp.disks.mount_checks import check_mount_status
 from nbkp.disks.output import mount_result_json
 from nbkp.disks.plan import plan_lifecycle
@@ -37,7 +37,7 @@ def mount_cmd(
     ctx: typer.Context,
     config: CONFIG_OPTION = None,
     output: OUTPUT_OPTION = OutputFormat.HUMAN,
-    name: NAME_OPTION = None,
+    volume: VOLUME_OPTION = None,
     location: LOCATION_OPTION = None,
     *,
     exclude_location: EXCLUDE_LOCATION_OPTION = None,
@@ -46,10 +46,10 @@ def mount_cmd(
         bool,
         typer.Option(
             "--dry-run",
+            "-n",
             help=(
                 "Report what would be unlocked and mounted without changing"
                 " anything (no passphrase retrieval, no udisksctl unlock/mount)."
-                " Long form only: -n is --name here."
             ),
         ),
     ] = False,
@@ -57,12 +57,19 @@ def mount_cmd(
     """
     Unlock LUKS and mount volumes.
 
-    Mounts all volumes with mount config, or specific ones via --name.
+    Mounts all volumes with mount config, or specific ones via --volume.
     """
     runtime = runtime_of(ctx)
     cfg = load_config_or_exit(runtime, config, output)
-    require_known_names(cfg, name, output)
-    resolved = resolve_endpoints(cfg, location, exclude_location, network, output)
+    require_known_names(cfg, volume, output)
+    resolved = resolve_endpoints(
+        cfg,
+        location,
+        exclude_location,
+        network,
+        output,
+        ssh_config_path=runtime.ssh_config_path(),
+    )
 
     if dry_run:
         show_plan(
@@ -70,7 +77,7 @@ def mount_cmd(
                 cfg,
                 resolved,
                 mounting=True,
-                names=name,
+                names=volume,
                 probe=partial(check_mount_status, run=runtime.run),
             ),
             mount_display_names(cfg),
@@ -78,11 +85,11 @@ def mount_cmd(
         )
         return
 
-    results = _mount_with_progress(cfg, resolved, name, output, runtime)
-    _show_results(cfg, resolved, results, name, output)
+    results = _mount_with_progress(cfg, resolved, volume, output, runtime)
+    _show_results(cfg, resolved, results, volume, output)
     invocation = Invocation.of(config, location, exclude_location, network)
     if output is OutputFormat.HUMAN:
-        _print_auth_hint(results, invocation)
+        print_auth_hint(results, invocation)
     if any_failed(results):
         if output is OutputFormat.HUMAN:
             Console(stderr=True).print(
@@ -145,20 +152,3 @@ def _show_results(
         output,
         {r.volume_slug: mount_result_json(r) for r in results},
     )
-
-
-def _print_auth_hint(results: list[MountResult], invocation: Invocation) -> None:
-    """Point at ``disks setup-auth`` when polkit refused an unlock or mount."""
-    if refused_by_polkit(results):
-        console = Console()
-        console.print(
-            "udisks refused the operation (no polkit rule). Generate one with:",
-        )
-        # soft_wrap: the command must stay on one line to copy-paste.
-        console.print(
-            Text(
-                invocation.command("disks", "setup-auth", endpoint_flags=False),
-                style="bold",
-            ),
-            soft_wrap=True,
-        )

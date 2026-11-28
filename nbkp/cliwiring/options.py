@@ -13,6 +13,18 @@ import typer
 from nbkp.cliwiring.output_format import OutputFormat
 from nbkp.remote.endpoints import NetworkType
 
+
+def expand_user_path(path: Path | None) -> Path | None:
+    """
+    Return *path* with ``~`` expanded, then made absolute.
+
+    A Typer option callback, used instead of ``resolve_path``: no shell expands the
+    ``~`` in ``--config=~/x.yaml`` (after ``=``) or in a systemd unit, and
+    ``resolve_path`` would turn it into ``<cwd>/~/x.yaml``.
+    """
+    return None if path is None else path.expanduser().resolve()
+
+
 CONFIG_OPTION = Annotated[
     Path | None,
     typer.Option(
@@ -25,7 +37,7 @@ CONFIG_OPTION = Annotated[
         ),
         file_okay=True,
         dir_okay=False,
-        resolve_path=True,
+        callback=expand_user_path,
     ),
 ]
 

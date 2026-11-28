@@ -25,6 +25,23 @@ from nbkp.remote.pool import ConnectionPool, active_pool
 from nbkp.remote.ssh import shell_join
 
 
+class ConnectionLostError(paramiko.SSHException):
+    """
+    The connection dropped after the command started, so its outcome is unknown.
+
+    A ``paramiko.SSHException``, so :func:`~nbkp.remote.errors.ssh_connection_errors`
+    classifies it as an unreachable host, as for a connection that failed to open.
+    """
+
+    def __init__(self) -> None:
+        """Build the error; it carries no fields, only what happened."""
+        super().__init__("connection lost before the command exited")
+
+
+_NO_EXIT_STATUS = -1
+"""What Paramiko's ``recv_exit_status`` returns when the server sent none."""
+
+
 def _build_single_connection(
     server: SshEndpoint,
     gateway: Connection | None = None,
@@ -214,12 +231,27 @@ def _run_on_connection(
         stdout, stderr = _read_output(channel)
         return subprocess.CompletedProcess(
             args=cmd_string,
-            returncode=channel.recv_exit_status(),
+            returncode=_exit_status(channel),
             stdout=stdout,
             stderr=stderr,
         )
     finally:
         channel.close()
+
+
+def _exit_status(channel: paramiko.Channel) -> int:
+    """
+    Return the command's exit status, raising when the connection dropped mid-command.
+
+    Paramiko returns -1 when no exit status arrived. Returned as is, a dropped
+    connection would read as the command's answer: a tool not installed, a device
+    not plugged in. A command killed by a signal also sends no exit status, but on
+    a transport that is still up, so only a closed transport is a lost connection.
+    """
+    status = channel.recv_exit_status()
+    if status == _NO_EXIT_STATUS and not channel.get_transport().is_active():
+        raise ConnectionLostError
+    return status
 
 
 def _send_input(channel: paramiko.Channel, data: bytes) -> None:
@@ -286,16 +318,21 @@ def _run_pooled(
         opened, reused = _get_or_open(pool, key, open_)
     try:
         return _run_on_connection(opened.target, cmd_string, stdin)
+    except ConnectionLostError:
+        # The command started and may have done its work (an unlock, a delete):
+        # running it again is not safe.
+        pool.discard(key)
+        raise
     except OSError, EOFError, paramiko.SSHException:
         pool.discard(key)
         if not reused:
             raise
     # A reused connection can be dead without the transport knowing yet (a
-    # NAT or firewall dropped it). _run_on_connection raises a transport error
-    # only while opening the session channel or starting the command: a
-    # connection lost mid-command ends the command with exit status -1
-    # instead, and a failed write of its input is ignored. The command therefore never
-    # started, and running it once more on a fresh connection is safe.
+    # NAT or firewall dropped it). Apart from ConnectionLostError, handled
+    # above, _run_on_connection raises a transport error only while opening the
+    # session channel or starting the command, and a failed write of its input
+    # is ignored. The command therefore never started, and running it once more
+    # on a fresh connection is safe.
     fresh, _ = _get_or_open(pool, key, open_)
     return _run_on_connection(fresh.target, cmd_string, stdin)
 

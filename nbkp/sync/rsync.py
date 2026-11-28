@@ -52,9 +52,20 @@ _DEFAULT_RSYNC_OPTIONS: list[str] = [
     "--delete-excluded",
     "--partial-dir=.rsync-partial",
     "--safe-links",
+]
+
+_SENTINEL_FILTERS: list[str] = [
     "--filter=H .nbkp-*",  # hide sentinels from transfer
     "--filter=P .nbkp-*",  # protect sentinels from deletion
 ]
+"""
+Always emitted, whatever ``default-options-override`` says.
+
+Without them rsync copies the source's sentinels into the destination and, with
+``--delete``, deletes the destination's own: the next preflight then reads the
+destination as unmounted and skips the sync silently. They come before every user
+filter, so that rsync's first-match rule lets no user rule override them.
+"""
 
 
 def resolve_source_path(
@@ -110,6 +121,7 @@ def _base_rsync_args(
     return [
         "rsync",
         *options,
+        *_SENTINEL_FILTERS,
         *(["--checksum"] if rsync_opts.checksum else []),
         *(["--compress"] if rsync_opts.compress else []),
         *rsync_opts.extra_options,
@@ -175,11 +187,32 @@ def build_rsync_command(
     dry_run: bool = False,
     link_dest: str | None = None,
     progress: ProgressMode | None = None,
-    resolved_endpoints: ResolvedEndpoints | None = None,
+    resolved_endpoints: ResolvedEndpoints,
     dest_suffix: str | None = None,
 ) -> list[str]:
-    """For a remote-to-remote sync the command is wrapped in SSH."""
-    resolved = resolved_endpoints or {}
+    """
+    Return the argument list that runs rsync for *sync*, on the orchestrator.
+
+    The source is read from its endpoint, or from its ``latest/`` when the source
+    endpoint has snapshots. rsync writes into ``<destination>/<dest_suffix>/``
+    (``staging`` for btrfs, ``snapshots/<name>`` for hard-link), or into the
+    destination endpoint itself when *dest_suffix* is ``None``. *link_dest*,
+    when set, is passed as ``--link-dest`` and resolved by rsync against that
+    target directory.
+
+    The command takes one of four shapes:
+
+    - local to local: plain ``rsync <src>/ <dst>/``;
+    - remote to local, local to remote: rsync runs here and reaches the remote
+      volume over ``-e ssh``, with ``--protect-args`` so the remote shell does not
+      split or expand the paths;
+    - remote to remote: both volumes are on one server (config validation enforces
+      it), so the whole rsync command is run there over SSH, with local paths.
+
+    Raises :class:`KeyError` when a remote volume is missing from
+    *resolved_endpoints*: the caller resolves every endpoint the sync touches.
+    """
+    resolved = resolved_endpoints
     src_ep = config.source_endpoint(sync)
     dst_ep = config.destination_endpoint(sync)
     src_vol = config.volumes[src_ep.volume]
@@ -374,7 +407,7 @@ def run_rsync(
     link_dest: str | None = None,
     progress: ProgressMode | None = None,
     on_output: Callable[[str], None] | None = None,
-    resolved_endpoints: ResolvedEndpoints | None = None,
+    resolved_endpoints: ResolvedEndpoints,
     dest_suffix: str | None = None,
     run_process: ProcessRunner = run_local_process,
 ) -> subprocess.CompletedProcess[str]:

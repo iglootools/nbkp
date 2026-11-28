@@ -1,4 +1,7 @@
-from collections.abc import Collection
+import os
+import subprocess
+from collections.abc import Collection, Generator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -16,15 +19,19 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
+from nbkp.fsprotocol import NEAREST_DIR_SEARCHABLE_SCRIPT
+from nbkp.policy import Severity, Strictness
 from nbkp.preflight.checks import (
     check_all_syncs,
     check_step_count,
 )
 from nbkp.preflight.probes import (
+    VolumeReadError,
     check_endpoint_sentinel,
     check_rsync_version,
     parse_rsync_version,
 )
+from nbkp.preflight.severity import severity_for_error
 from nbkp.preflight.snapshot_checks import (
     check_btrfs_mount_option,
     check_btrfs_subvolume,
@@ -52,8 +59,11 @@ from nbkp.preflight.status.volume import (
     VolumeErrorKind,
     VolumeStatus,
 )
+from nbkp.preflight.strictness import has_fatal_errors
 from nbkp.preflight.testkit import check_sync, check_volume
+from nbkp.preflight.troubleshoot import Layer, collect_issues
 from nbkp.preflight.volume_checks import check_volume_capabilities, observe_ssh_endpoint
+from nbkp.remote.dispatch import build_tool_lookup_args
 from nbkp.remote.endpoints import EndpointFilter, ResolvedEndpoint, ResolvedEndpoints
 from nbkp.remote.resolution import resolve_all_endpoints, resolve_proxy_chain
 from nbkp.snapshots.common import create_snapshot_timestamp
@@ -255,6 +265,162 @@ class TestCheckLocalVolume:
         assert check_endpoint_sentinel(vol, "photos", ".nbkp-src", {}) is True
 
 
+_NOT_ROOT = pytest.mark.skipif(
+    os.geteuid() == 0,
+    reason="root searches every directory",
+)
+
+
+@contextmanager
+def _unsearchable(directory: Path) -> Generator[None]:
+    """Make *directory* unsearchable until the end of the block."""
+    directory.chmod(0o600)
+    try:
+        yield
+    finally:
+        directory.chmod(0o700)
+
+
+class TestUnreadableSentinel:
+    """A sentinel behind an unsearchable directory is unknown, never absent."""
+
+    @_NOT_ROOT
+    def test_local_endpoint_sentinel_raises(self, tmp_path: Path) -> None:
+        (tmp_path / "photos").mkdir()
+        (tmp_path / "photos" / ".nbkp-src").touch()
+        vol = LocalVolume(slug="data", path=str(tmp_path))
+        with (
+            _unsearchable(tmp_path / "photos"),
+            pytest.raises(VolumeReadError) as excinfo,
+        ):
+            check_endpoint_sentinel(vol, "photos", ".nbkp-src", {})
+        assert excinfo.value.path == f"{tmp_path}/photos/.nbkp-src"
+
+    def test_local_sentinel_under_missing_directory_is_absent(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        vol = LocalVolume(slug="data", path=str(tmp_path))
+        assert check_endpoint_sentinel(vol, "missing/dir", ".nbkp-src", {}) is False
+
+    def test_remote_sentinel_raises_when_nearest_directory_unsearchable(self) -> None:
+        vol, config = _remote_config()
+        run = (
+            FakeCommandRunner()
+            .on("test", "-f", returns=FAILS)
+            .on(
+                "sh",
+                "-c",
+                NEAREST_DIR_SEARCHABLE_SCRIPT,
+                returns=completed(returncode=3, stderr="/backup/photos\n"),
+            )
+        )
+        with pytest.raises(VolumeReadError) as excinfo:
+            check_endpoint_sentinel(
+                vol,
+                "photos",
+                ".nbkp-src",
+                _make_resolved(config),
+                run=run,
+            )
+        assert excinfo.value.detail == "/backup/photos is not searchable"
+
+    def test_remote_sentinel_absent_when_nearest_directory_searchable(self) -> None:
+        vol, config = _remote_config()
+        run = FakeCommandRunner().on("test", "-f", returns=FAILS)
+        assert (
+            check_endpoint_sentinel(
+                vol,
+                "photos",
+                ".nbkp-src",
+                _make_resolved(config),
+                run=run,
+            )
+            is False
+        )
+        assert run.commands[-1] == [
+            "sh",
+            "-c",
+            NEAREST_DIR_SEARCHABLE_SCRIPT,
+            "sh",
+            "/backup/photos/.nbkp-src",
+        ]
+
+    def test_nearest_directory_script_tells_absent_from_unknown(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        (tmp_path / "a").mkdir()
+
+        def probe(path: Path) -> subprocess.CompletedProcess[str]:
+            return subprocess.run(
+                ["/bin/sh", "-c", NEAREST_DIR_SEARCHABLE_SCRIPT, "sh", str(path)],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+        assert probe(tmp_path / "a" / "missing" / "f").returncode == 0
+        if os.geteuid() != 0:
+            with _unsearchable(tmp_path / "a"):
+                hidden = probe(tmp_path / "a" / "b" / "f")
+            assert (hidden.returncode, hidden.stderr) == (3, f"{tmp_path}/a\n")
+
+    @_NOT_ROOT
+    def test_unreadable_destination_is_fatal_not_inactive(self, tmp_path: Path) -> None:
+        src = tmp_path / "src"
+        dst = tmp_path / "dst"
+        for vol_dir in (src, dst):
+            vol_dir.mkdir()
+            (vol_dir / ".nbkp-vol").touch()
+        (src / ".nbkp-src").touch()
+        (dst / "backup").mkdir()
+        (dst / "backup" / ".nbkp-dst").touch()
+        config = Config(
+            volumes={
+                "src": LocalVolume(slug="src", path=str(src)),
+                "dst": LocalVolume(slug="dst", path=str(dst)),
+            },
+            sync_endpoints={
+                "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
+                "ep-dst": SyncEndpoint(slug="ep-dst", volume="dst", subdir="backup"),
+            },
+            syncs={
+                "s1": SyncConfig(slug="s1", source="ep-src", destination="ep-dst"),
+            },
+        )
+
+        with _unsearchable(dst / "backup"):
+            result = _check_all(config, healthy_host(), resolved_endpoints={})
+
+        dst_status = result.destination_endpoint_statuses["ep-dst"]
+        assert dst_status.errors == [DestinationEndpointErrorKind.SENTINEL_UNREADABLE]
+        assert dst_status.diagnostics is not None
+        assert dst_status.diagnostics.sentinel_unreadable == "Permission denied"
+        assert has_fatal_errors(result.sync_statuses)
+
+    @_NOT_ROOT
+    def test_unreadable_volume_sentinel_is_fatal(self, tmp_path: Path) -> None:
+        (tmp_path / "vol").mkdir()
+        (tmp_path / "vol" / ".nbkp-vol").touch()
+        with _unsearchable(tmp_path / "vol"):
+            status = check_volume(
+                LocalVolume(slug="data", path=str(tmp_path / "vol")),
+                {},
+                run=healthy_host(),
+                which=local_tools(),
+                platform="linux",
+            )
+        assert status.errors == [VolumeErrorKind.SENTINEL_UNREADABLE]
+        assert (
+            severity_for_error(
+                VolumeErrorKind.SENTINEL_UNREADABLE,
+                Strictness.IGNORE_INACTIVE,
+            )
+            is Severity.ERROR
+        )
+
+
 class TestCheckRemoteVolume:
     def test_volume_active_when_sentinel_exists(self) -> None:
         vol, config = _remote_config()
@@ -286,7 +452,7 @@ class TestCheckRemoteVolume:
 
     def test_ssh_unreachable(self) -> None:
         """SSH connection fails entirely."""
-        run = FakeCommandRunner().on("which", returns=TimeoutError("timed out"))
+        run = FakeCommandRunner().on("sh", "-c", returns=TimeoutError("timed out"))
         vol, config = _remote_config()
         resolved = _make_resolved(config)
         status = check_volume(vol, resolved, run=run, platform="linux")
@@ -295,7 +461,7 @@ class TestCheckRemoteVolume:
         assert status.ssh_endpoint_status.diagnostics.ssh_reachable is False
         assert status.diagnostics is None
         # The first failed probe settles it: nothing else is tried.
-        assert run.commands == [["which", "rsync"]]
+        assert run.commands == [build_tool_lookup_args("rsync")]
 
 
 class TestCheckRemoteVolumeLocationExcluded:
@@ -1063,7 +1229,11 @@ class TestCheckSyncRemoteCommands:
 
     def test_rsync_not_found_on_remote_source(self, tmp_path: Path) -> None:
         config, sync = _sync_with_remote(tmp_path, "src")
-        run = FakeCommandRunner().on("which", "rsync", returns=FAILS, volume="src")
+        run = FakeCommandRunner().on(
+            *build_tool_lookup_args("rsync"),
+            returns=FAILS,
+            volume="src",
+        )
 
         status = _check(sync, config, resolved=_make_resolved(config), run=run)
         assert status.active is False
@@ -1074,7 +1244,11 @@ class TestCheckSyncRemoteCommands:
 
     def test_rsync_not_found_on_remote_destination(self, tmp_path: Path) -> None:
         config, sync = _sync_with_remote(tmp_path, "dst")
-        run = FakeCommandRunner().on("which", "rsync", returns=FAILS, volume="dst")
+        run = FakeCommandRunner().on(
+            *build_tool_lookup_args("rsync"),
+            returns=FAILS,
+            volume="dst",
+        )
 
         status = _check(sync, config, resolved=_make_resolved(config), run=run)
         assert status.active is False
@@ -1085,7 +1259,11 @@ class TestCheckSyncRemoteCommands:
 
     def test_btrfs_not_found_on_remote_destination(self, tmp_path: Path) -> None:
         config, sync = _sync_with_remote(tmp_path, "dst", dst_btrfs=True)
-        run = FakeCommandRunner().on("which", "btrfs", returns=FAILS, volume="dst")
+        run = FakeCommandRunner().on(
+            *build_tool_lookup_args("btrfs"),
+            returns=FAILS,
+            volume="dst",
+        )
 
         status = _check(
             sync,
@@ -1175,7 +1353,11 @@ class TestCheckSyncRemoteCommands:
     def test_stat_not_found_on_remote_destination(self, tmp_path: Path) -> None:
         config, sync = _sync_with_remote(tmp_path, "dst", dst_btrfs=True)
         # Were stat probed, ext4 would report VOL_NOT_BTRFS.
-        run = FakeCommandRunner().on("which", "stat", returns=FAILS, volume="dst")
+        run = FakeCommandRunner().on(
+            *build_tool_lookup_args("stat"),
+            returns=FAILS,
+            volume="dst",
+        )
 
         status = _check(
             sync,
@@ -1198,7 +1380,7 @@ class TestCheckSyncRemoteCommands:
         config, sync = _sync_with_remote(tmp_path, "dst", dst_btrfs=True)
         run = (
             FakeCommandRunner()
-            .on("which", "findmnt", returns=FAILS, volume="dst")
+            .on(*build_tool_lookup_args("findmnt"), returns=FAILS, volume="dst")
             # Were findmnt probed, its options would lack user_subvol_rm_allowed.
             .on("findmnt", "-T", "/backup", returns=completed(stdout="rw\n"))
         )
@@ -1818,6 +2000,61 @@ class TestAlternateEndpointUnderLocationExclusion:
         ]
         assert check_step_count(config, resolved_endpoints=resolved) == (
             len(result.ssh_endpoint_statuses)
+            + len(result.volume_statuses)
+            + len(result.source_endpoint_statuses)
+            + len(result.destination_endpoint_statuses)
+        )
+
+
+class TestExcludedVolumeEndpoints:
+    def _config(self, laptop: Path) -> Config:
+        return Config(
+            ssh_endpoints={
+                "home": SshEndpoint(slug="home", host="nas.example.com"),
+                "a": SshEndpoint(slug="a", host="a.lan", location="away"),
+                "b": SshEndpoint(slug="b", host="b.lan", location="away"),
+            },
+            volumes={
+                "laptop": LocalVolume(slug="laptop", path=str(laptop)),
+                "nas": RemoteVolume(
+                    slug="nas",
+                    ssh_endpoint="home",
+                    ssh_endpoints=["a", "b"],
+                    path="/nas",
+                ),
+            },
+            sync_endpoints={
+                "ep-src": SyncEndpoint(slug="ep-src", volume="laptop"),
+                "ep-nas": SyncEndpoint(slug="ep-nas", volume="nas"),
+            },
+            syncs={
+                "s1": SyncConfig(slug="s1", source="ep-src", destination="ep-nas"),
+            },
+        )
+
+    def test_candidates_reported_excluded_and_non_candidate_primary_probed(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        config = self._config(tmp_path)
+        resolved = resolve_all_endpoints(
+            config,
+            EndpointFilter(exclude_locations=["away"]),
+            ssh_config=paramiko.SSHConfig(),
+            lookup=lambda _host: {"203.0.113.7"},
+        )
+        run = FakeCommandRunner()
+
+        result = _check_all(config, run, resolved_endpoints=resolved)
+
+        statuses = result.ssh_endpoint_statuses
+        assert statuses["a"].errors == [SshEndpointErrorKind.LOCATION_EXCLUDED]
+        assert statuses["b"].errors == [SshEndpointErrorKind.LOCATION_EXCLUDED]
+        assert SshEndpointErrorKind.LOCATION_EXCLUDED not in statuses["home"].errors
+        assert set(_standalone_probes(run)) == {"home"}
+        assert result.volume_statuses["nas"].ssh_endpoint_status.slug == "a"
+        assert check_step_count(config, resolved_endpoints=resolved) == (
+            len(statuses)
             + len(result.volume_statuses)
             + len(result.source_endpoint_statuses)
             + len(result.destination_endpoint_statuses)
@@ -2773,6 +3010,21 @@ def _nas_and_local_config(tmp_path: Path) -> Config:
     )
 
 
+def _assert_drop_reported(result: PreflightResult, host: str) -> None:
+    """Assert *host* is unreachable where the SSH table and troubleshoot read."""
+    assert result.ssh_endpoint_statuses[host].errors == [
+        SshEndpointErrorKind.UNREACHABLE,
+    ]
+    issues = collect_issues(
+        result.ssh_endpoint_statuses,
+        result.volume_statuses,
+        result.sync_statuses,
+    )
+    assert (Layer.SSH_ENDPOINT, host, SshEndpointErrorKind.UNREACHABLE) in [
+        (i.layer, i.subject, i.error) for i in issues
+    ]
+
+
 class TestConnectionLostDuringPreflight:
     """
     A host that drops after the first probe is unreachable for that host only.
@@ -2800,6 +3052,7 @@ class TestConnectionLostDuringPreflight:
         )
         assert result.sync_statuses["remote"].is_expected_inactive()
         assert result.sync_statuses["local"].active
+        _assert_drop_reported(result, "nas")
 
     def test_during_endpoint_observation(self, tmp_path: Path) -> None:
         config = _nas_and_local_config(tmp_path)
@@ -2812,14 +3065,17 @@ class TestConnectionLostDuringPreflight:
 
         result = _check_all(config, run, resolved_endpoints=_make_resolved(config))
 
-        assert result.volume_statuses["nas"].active
         src = result.source_endpoint_statuses["ep-nas"]
         assert src.errors == [SourceEndpointErrorKind.VOLUME_INACTIVE]
         assert src.volume_status.ssh_endpoint_status.errors == [
             SshEndpointErrorKind.UNREACHABLE,
         ]
+        assert result.volume_statuses["nas"].errors == [
+            VolumeErrorKind.SSH_ENDPOINT_INACTIVE,
+        ]
         assert result.sync_statuses["remote"].is_expected_inactive()
         assert result.sync_statuses["local"].active
+        _assert_drop_reported(result, "nas")
 
     def test_during_destination_endpoint_observation(self, tmp_path: Path) -> None:
         base = _nas_and_local_config(tmp_path)
@@ -2856,14 +3112,15 @@ class TestConnectionLostDuringPreflight:
 
         result = _check_all(config, run, resolved_endpoints=_make_resolved(config))
 
-        assert result.volume_statuses["nas"].active
         dst = result.destination_endpoint_statuses["ep-nas-dst"]
         assert dst.errors == [DestinationEndpointErrorKind.VOLUME_INACTIVE]
         assert dst.volume_status.ssh_endpoint_status.errors == [
             SshEndpointErrorKind.UNREACHABLE,
         ]
+        assert not result.volume_statuses["nas"].active
         assert result.sync_statuses["push"].is_expected_inactive()
         assert result.sync_statuses["local"].active
+        _assert_drop_reported(result, "nas")
 
     def test_local_errors_still_propagate(self, tmp_path: Path) -> None:
         config = _nas_and_local_config(tmp_path)
@@ -2881,8 +3138,7 @@ class TestConnectionLostDuringPreflight:
         # The host tools answer; the connection drops at the mount tools.
         run = healthy_host(
             FakeCommandRunner().on(
-                "which",
-                "udisksctl",
+                *build_tool_lookup_args("udisksctl"),
                 returns=EOFError("connection closed by peer"),
             ),
         )
@@ -2896,4 +3152,4 @@ class TestConnectionLostDuringPreflight:
 
         assert diag.ssh_reachable is False
         assert diag.ssh_error == "connection closed by peer"
-        assert ["which", "rsync"] in run.commands
+        assert build_tool_lookup_args("rsync") in run.commands

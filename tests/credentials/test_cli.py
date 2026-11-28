@@ -28,7 +28,7 @@ from nbkp.credentials import (
     CredentialErrorKind,
     PassphrasePrefetch,
 )
-from nbkp.credentials.cli.keyring_status_cmd import keyring_status_json
+from nbkp.credentials.output import keyring_status_json
 from tests.fakes import completed, fake_runtime
 from tests.fixtures.cli import runner
 
@@ -91,7 +91,9 @@ class TestKeyringStatusJson:
                     "available": False,
                     "error": (
                         "No passphrase found in keyring for id 'disk[1]'."
-                        " Store it with: keyring set nbkp disk[1]"
+                        " Store it with: keyring set nbkp 'disk[1]'"
+                        " (the keyring command is not part of nbkp's install:"
+                        " uv tool install keyring)"
                     ),
                     "reason": "not-found",
                 },

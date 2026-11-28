@@ -2,7 +2,6 @@
 
 import os
 import sys
-from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -24,7 +23,6 @@ from nbkp.sync import (
     SyncFailureKind,
     SyncOutcome,
     SyncResult,
-    SyncWarningKind,
 )
 from nbkp.sync.testkit.seed import create_seed_sentinels
 
@@ -89,7 +87,7 @@ class TestHardLinkDryRun:
         orphan = "2099-01-01T00-00-00.000Z"
         (tmp_path / "dst" / SNAPSHOTS_DIR / orphan).mkdir()
 
-        results = _run(config, dry_run=True)
+        results = _run(config, dry_run=True, now=datetime(2026, 3, 7, tzinfo=UTC))
 
         assert results[0].outcome == SyncOutcome.SUCCESS
         assert _snapshots(tmp_path) == sorted([first, orphan])
@@ -98,34 +96,28 @@ class TestHardLinkDryRun:
         )
 
 
-@pytest.fixture
-def undeletable_snapshot(tmp_path: Path) -> Iterator[Path]:
-    """Yield an old snapshot whose content cannot be removed (read-only dir)."""
-    old = tmp_path / "dst" / SNAPSHOTS_DIR / "2020-01-01T00-00-00.000Z"
-    (old / "sub").mkdir(parents=True)
-    (old / "sub" / "f").write_text("x")
-    (old / "sub").chmod(0o555)
-    yield old
-    (old / "sub").chmod(0o755)
-
-
 @pytest.mark.skipif(os.geteuid() == 0, reason="root ignores directory permissions")
-class TestPruneFailure:
-    def test_prune_failure_is_a_warning(
+class TestPruneReadOnlySnapshot:
+    def test_snapshot_with_read_only_directories_is_pruned(
         self,
         tmp_path: Path,
-        undeletable_snapshot: Path,
     ) -> None:
+        """`rsync -a` keeps read-only directory modes; pruning must still delete."""
+        old = tmp_path / "dst" / SNAPSHOTS_DIR / "2020-01-01T00-00-00.000Z"
+        (old / "ro" / "unlistable").mkdir(parents=True)
+        (old / "ro" / "f").write_text("x")
+        (old / "ro" / "unlistable").chmod(0o000)
+        (old / "ro").chmod(0o555)
         config = _config(tmp_path, max_snapshots=1)
         latest = tmp_path / "dst" / LATEST_LINK
         latest.unlink(missing_ok=True)
-        latest.symlink_to(f"{SNAPSHOTS_DIR}/{undeletable_snapshot.name}")
+        latest.symlink_to(f"{SNAPSHOTS_DIR}/{old.name}")
+
         results = _run(config)
 
         assert results[0].outcome == SyncOutcome.SUCCESS
-        assert results[0].failure is None
-        assert [w.kind for w in results[0].warnings] == [SyncWarningKind.PRUNE]
-        assert undeletable_snapshot.exists()
+        assert results[0].warnings == ()
+        assert not old.exists()
         new = str(Path(tmp_path / "dst" / LATEST_LINK).readlink())
         assert (tmp_path / "dst" / new / "data.txt").read_text() == "hello"
 
@@ -179,6 +171,18 @@ class TestClockBehindLatest:
 
         assert later[0].outcome == SyncOutcome.SUCCESS
         assert complete in _snapshots(tmp_path)
+
+    def test_dry_run_reports_the_refusal(self, tmp_path: Path) -> None:
+        """A dry run must not report success for a run that will be refused."""
+        config = _config(tmp_path)
+        _run(config)
+        [complete] = _snapshots(tmp_path)
+
+        behind = _run(config, dry_run=True, now=datetime(2025, 1, 1, tzinfo=UTC))
+
+        assert behind[0].failure == SyncFailureKind.MKDIR
+        assert "is the clock behind?" in (behind[0].detail or "")
+        assert _snapshots(tmp_path) == [complete]
 
     def test_same_name_as_latest_is_refused(self, tmp_path: Path) -> None:
         config = _config(tmp_path)

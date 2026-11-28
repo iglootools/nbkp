@@ -13,12 +13,14 @@ from typing import Any
 import pytest
 
 from nbkp.cli import app
-from nbkp.cliwiring.lock import hold_run_lock
 from nbkp.cliwiring.output_format import echo_json
 from nbkp.config.testkit import write_config
 from nbkp.preflight.cli.check_cmd import check_json
-from tests.fakes import FakeCommandRunner, FakeRunLock, fake_runtime
+from nbkp.remote.dispatch import build_tool_lookup_args
+from nbkp.runlock import hold_run_lock
+from tests.fakes import FakeCommandRunner, FakeRunLock, completed, fake_runtime
 from tests.fixtures.cli import runner
+from tests.fixtures.disks import mounted_drive_host, with_encrypted_volume
 from tests.fixtures.preflight import (
     config_with_locations,
     preflight,
@@ -142,7 +144,7 @@ class TestCheckCommand:
 
     def test_infrastructure_error_exits_1(self, tmp_path: Path) -> None:
         rsync_missing = healthy_nas(
-            FakeCommandRunner().on("which", "rsync", returns=FAILS),
+            FakeCommandRunner().on(*build_tool_lookup_args("rsync"), returns=FAILS),
         )
 
         exit_code, _ = _check(write_config(tmp_path, nas_config()), run=rsync_missing)
@@ -171,10 +173,34 @@ class TestCheckCommand:
         )
         assert "nbkp preflight troubleshoot -c config.yaml -N private" in flat
 
+    def test_hint_keeps_the_strictness_and_no_mount(
+        self,
+        tmp_path: Path,
+        chdir: Callable[[Path], None],
+    ) -> None:
+        chdir(tmp_path)
+        write_config(tmp_path, nas_config())
+
+        _, output = _check(
+            Path("config.yaml"),
+            "-S",
+            "ignore-none",
+            "--no-mount",
+            run=_destination_sentinel_missing(),
+        )
+
+        flat = " ".join(
+            line.strip(" │") for line in output.splitlines() if line.strip()
+        )
+        assert (
+            "nbkp preflight troubleshoot -S ignore-none --no-mount -c config.yaml"
+            in flat
+        )
+
 
 class TestRunLock:
     """
-    A check takes the run lock, unless it neither mounts nor umounts.
+    A check takes the run lock when it mounts a drive, and only then.
 
     It mounts and umounts drives, so it takes the lock another nbkp command may hold.
     """
@@ -183,7 +209,7 @@ class TestRunLock:
         self,
         tmp_path: Path,
     ) -> None:
-        config_path = write_config(tmp_path, nas_config())
+        config_path = write_config(tmp_path, with_encrypted_volume(nas_config()))
         state_home = tmp_path / "state"
         lock_path = state_home / "nbkp" / "run.lock"
         run = healthy_nas()
@@ -207,23 +233,33 @@ class TestRunLock:
         assert run.commands == []
 
     @pytest.mark.parametrize(
-        ("args", "locked"),
-        [([], True), (["--no-mount", "--no-umount"], False)],
+        ("args", "drive", "locked"),
+        [
+            ([], True, True),
+            (["--no-mount"], True, False),
+            (["--no-mount", "--no-umount"], True, False),
+            ([], False, False),
+        ],
     )
-    def test_the_lock_is_taken_only_when_mounting_or_umounting(
+    def test_the_lock_is_taken_only_when_a_drive_is_mounted(
         self,
         args: list[str],
         *,
+        drive: bool,
         locked: bool,
         tmp_path: Path,
     ) -> None:
-        config_path = write_config(tmp_path, nas_config())
+        config = with_encrypted_volume(nas_config()) if drive else nas_config()
+        config_path = write_config(tmp_path, config)
         lock = FakeRunLock()
 
         result = runner.invoke(
             app,
             ["preflight", "check", "--config", str(config_path), *args],
-            obj=fake_runtime(run=healthy_nas(), run_lock=lock),
+            obj=fake_runtime(
+                run=healthy_nas(mounted_drive_host(completed())),
+                run_lock=lock,
+            ),
         )
 
         assert result.exit_code == 0, result.output

@@ -39,7 +39,7 @@ class TestBuildRsyncCommandLocalToLocal:
     def test_command_copies_between_local_paths(self) -> None:
         sync, config = two_volume_config(src_subdir="photos", dst_subdir="backup")
 
-        cmd = build_rsync_command(sync, config)
+        cmd = build_rsync_command(sync, config, resolved_endpoints={})
         assert cmd == [
             "rsync",
             "-a",
@@ -56,7 +56,7 @@ class TestBuildRsyncCommandLocalToLocal:
     def test_dry_run_flag_added_when_dry_run(self) -> None:
         sync, config = two_volume_config()
 
-        cmd = build_rsync_command(sync, config, dry_run=True)
+        cmd = build_rsync_command(sync, config, dry_run=True, resolved_endpoints={})
         assert "--dry-run" in cmd
 
     def test_link_dest(self) -> None:
@@ -66,6 +66,7 @@ class TestBuildRsyncCommandLocalToLocal:
             sync,
             config,
             link_dest="../../snapshots/2024-01-01T00:00:00.000Z",
+            resolved_endpoints={},
         )
         assert "--link-dest=../../snapshots/2024-01-01T00:00:00.000Z" in cmd
 
@@ -295,7 +296,7 @@ class TestBuildRsyncCommandFilters:
     def test_inline_filters(self) -> None:
         sync, config = two_volume_config(filters=["+ *.jpg", "- *.tmp"])
 
-        cmd = build_rsync_command(sync, config)
+        cmd = build_rsync_command(sync, config, resolved_endpoints={})
         assert cmd == [
             "rsync",
             "-a",
@@ -314,7 +315,7 @@ class TestBuildRsyncCommandFilters:
     def test_filter_file(self) -> None:
         sync, config = two_volume_config(filter_file="/etc/nbkp/filters.rules")
 
-        cmd = build_rsync_command(sync, config)
+        cmd = build_rsync_command(sync, config, resolved_endpoints={})
         assert cmd == [
             "rsync",
             "-a",
@@ -335,7 +336,7 @@ class TestBuildRsyncCommandFilters:
             filter_file="/etc/nbkp/filters.rules",
         )
 
-        cmd = build_rsync_command(sync, config)
+        cmd = build_rsync_command(sync, config, resolved_endpoints={})
         assert cmd == [
             "rsync",
             "-a",
@@ -360,7 +361,7 @@ class TestBuildRsyncCommandFilters:
             ],
         )
 
-        cmd = build_rsync_command(sync, config)
+        cmd = build_rsync_command(sync, config, resolved_endpoints={})
         assert cmd == [
             "rsync",
             "-a",
@@ -380,7 +381,7 @@ class TestBuildRsyncCommandFilters:
     def test_no_filters(self) -> None:
         sync, config = two_volume_config()
 
-        cmd = build_rsync_command(sync, config)
+        cmd = build_rsync_command(sync, config, resolved_endpoints={})
         user_filters = [
             a
             for a in cmd
@@ -395,7 +396,7 @@ class TestBuildRsyncCommandOptions:
     def _simple_config(self) -> tuple[SyncConfig, Config]:
         return two_volume_config()
 
-    def test_override_default_options(self) -> None:
+    def test_override_replaces_flags_but_keeps_sentinel_filters(self) -> None:
         sync, config = two_volume_config(
             rsync_options=RsyncOptions(
                 default_options_override=["-a"],
@@ -403,10 +404,12 @@ class TestBuildRsyncCommandOptions:
             ),
         )
 
-        cmd = build_rsync_command(sync, config)
+        cmd = build_rsync_command(sync, config, resolved_endpoints={})
         assert cmd == [
             "rsync",
             "-a",
+            "--filter=H .nbkp-*",
+            "--filter=P .nbkp-*",
             "/mnt/src/",
             "/mnt/dst/",
         ]
@@ -419,7 +422,7 @@ class TestBuildRsyncCommandOptions:
             ),
         )
 
-        cmd = build_rsync_command(sync, config)
+        cmd = build_rsync_command(sync, config, resolved_endpoints={})
         assert cmd == [
             "rsync",
             "-a",
@@ -443,11 +446,13 @@ class TestBuildRsyncCommandOptions:
             ),
         )
 
-        cmd = build_rsync_command(sync, config)
+        cmd = build_rsync_command(sync, config, resolved_endpoints={})
         assert cmd == [
             "rsync",
             "-a",
             "--delete",
+            "--filter=H .nbkp-*",
+            "--filter=P .nbkp-*",
             "--bwlimit=1000",
             "/mnt/src/",
             "/mnt/dst/",
@@ -456,27 +461,27 @@ class TestBuildRsyncCommandOptions:
     def test_checksum_default(self) -> None:
         # --checksum is opt-in: not emitted unless explicitly enabled.
         sync, config = self._simple_config()
-        cmd = build_rsync_command(sync, config)
+        cmd = build_rsync_command(sync, config, resolved_endpoints={})
         assert "--checksum" not in cmd
 
     def test_checksum_enabled(self) -> None:
         sync, config = two_volume_config(rsync_options=RsyncOptions(checksum=True))
-        cmd = build_rsync_command(sync, config)
+        cmd = build_rsync_command(sync, config, resolved_endpoints={})
         assert "--checksum" in cmd
 
     def test_checksum_disabled(self) -> None:
         sync, config = two_volume_config(rsync_options=RsyncOptions(checksum=False))
-        cmd = build_rsync_command(sync, config)
+        cmd = build_rsync_command(sync, config, resolved_endpoints={})
         assert "--checksum" not in cmd
 
     def test_compress_enabled(self) -> None:
         sync, config = two_volume_config(rsync_options=RsyncOptions(compress=True))
-        cmd = build_rsync_command(sync, config)
+        cmd = build_rsync_command(sync, config, resolved_endpoints={})
         assert "--compress" in cmd
 
     def test_compress_default(self) -> None:
         sync, config = self._simple_config()
-        cmd = build_rsync_command(sync, config)
+        cmd = build_rsync_command(sync, config, resolved_endpoints={})
         assert "--compress" not in cmd
 
 
@@ -656,7 +661,7 @@ class TestBuildRsyncCommandSpacesInPaths:
             dst_subdir="my backup",
         )
 
-        cmd = build_rsync_command(sync, config)
+        cmd = build_rsync_command(sync, config, resolved_endpoints={})
         assert cmd == [
             "rsync",
             "-a",
@@ -677,7 +682,7 @@ class TestBuildRsyncCommandProgress:
 
     def test_no_progress_flags_when_progress_omitted(self) -> None:
         sync, config = self._simple_config()
-        cmd = build_rsync_command(sync, config)
+        cmd = build_rsync_command(sync, config, resolved_endpoints={})
         assert "-v" not in cmd
         assert "--progress" not in cmd
         assert "--info=progress2" not in cmd
@@ -686,14 +691,24 @@ class TestBuildRsyncCommandProgress:
 
     def test_no_progress_flags_when_progress_none(self) -> None:
         sync, config = self._simple_config()
-        cmd = build_rsync_command(sync, config, progress=ProgressMode.NONE)
+        cmd = build_rsync_command(
+            sync,
+            config,
+            progress=ProgressMode.NONE,
+            resolved_endpoints={},
+        )
         assert "-v" not in cmd
         assert "--progress" not in cmd
         assert "--info=progress2" not in cmd
 
     def test_progress_overall(self) -> None:
         sync, config = self._simple_config()
-        cmd = build_rsync_command(sync, config, progress=ProgressMode.OVERALL)
+        cmd = build_rsync_command(
+            sync,
+            config,
+            progress=ProgressMode.OVERALL,
+            resolved_endpoints={},
+        )
         assert "--info=progress2" in cmd
         assert "--stats" in cmd
         assert "--human-readable" in cmd
@@ -702,7 +717,12 @@ class TestBuildRsyncCommandProgress:
 
     def test_progress_per_file(self) -> None:
         sync, config = self._simple_config()
-        cmd = build_rsync_command(sync, config, progress=ProgressMode.PER_FILE)
+        cmd = build_rsync_command(
+            sync,
+            config,
+            progress=ProgressMode.PER_FILE,
+            resolved_endpoints={},
+        )
         assert "-v" in cmd
         assert "--progress" in cmd
         assert "--human-readable" in cmd
@@ -711,7 +731,12 @@ class TestBuildRsyncCommandProgress:
 
     def test_progress_full(self) -> None:
         sync, config = self._simple_config()
-        cmd = build_rsync_command(sync, config, progress=ProgressMode.FULL)
+        cmd = build_rsync_command(
+            sync,
+            config,
+            progress=ProgressMode.FULL,
+            resolved_endpoints={},
+        )
         assert "-v" in cmd
         assert "--progress" in cmd
         assert "--info=progress2" in cmd
@@ -729,7 +754,7 @@ class TestSourceSnapshotPath:
             dst_subdir="backup",
         )
 
-        cmd = build_rsync_command(sync, config)
+        cmd = build_rsync_command(sync, config, resolved_endpoints={})
         assert cmd[-2] == "/mnt/src/photos/latest/"
         assert cmd[-1] == "/mnt/dst/backup/"
 
@@ -738,7 +763,7 @@ class TestSourceSnapshotPath:
             src_hard_link=HardLinkSnapshotConfig(enabled=True),
         )
 
-        cmd = build_rsync_command(sync, config)
+        cmd = build_rsync_command(sync, config, resolved_endpoints={})
         assert cmd[-2] == "/mnt/src/latest/"
         assert cmd[-1] == "/mnt/dst/"
 
@@ -770,7 +795,7 @@ class TestSourceSnapshotPath:
     def test_no_snapshots_source_unchanged(self) -> None:
         sync, config = two_volume_config(src_subdir="photos")
 
-        cmd = build_rsync_command(sync, config)
+        cmd = build_rsync_command(sync, config, resolved_endpoints={})
         assert cmd[-2] == "/mnt/src/photos/"
         assert cmd[-1] == "/mnt/dst/"
 
@@ -880,20 +905,29 @@ class TestBuildRsyncCommandProtectArgs:
     def test_local_to_local_does_not_protect_args(self) -> None:
         sync, config = _local_sync()
 
-        assert "--protect-args" not in build_rsync_command(sync, config)
+        assert "--protect-args" not in build_rsync_command(
+            sync,
+            config,
+            resolved_endpoints={},
+        )
 
 
 class TestDestSuffix:
     def test_destination_is_the_endpoint_when_no_suffix(self) -> None:
         sync, config = two_volume_config()
 
-        cmd = build_rsync_command(sync, config)
+        cmd = build_rsync_command(sync, config, resolved_endpoints={})
         assert cmd[-1] == "/mnt/dst/"
 
     def test_destination_suffixed_with_latest_when_given(self) -> None:
         sync, config = two_volume_config()
 
-        cmd = build_rsync_command(sync, config, dest_suffix="latest")
+        cmd = build_rsync_command(
+            sync,
+            config,
+            dest_suffix="latest",
+            resolved_endpoints={},
+        )
         assert cmd[-1] == "/mnt/dst/latest/"
 
     def test_destination_suffixed_with_snapshot_when_given(self) -> None:
@@ -902,7 +936,12 @@ class TestDestSuffix:
 
         _now = datetime(2026, 2, 21, 12, 0, 0, tzinfo=UTC)
         _ts = create_snapshot_timestamp(_now, dst, "linux")
-        cmd = build_rsync_command(sync, config, dest_suffix=f"snapshots/{_ts.name}")
+        cmd = build_rsync_command(
+            sync,
+            config,
+            dest_suffix=f"snapshots/{_ts.name}",
+            resolved_endpoints={},
+        )
         assert cmd[-1] == f"/mnt/dst/snapshots/{_ts.name}/"
 
     def test_local_to_remote(self) -> None:
@@ -961,11 +1000,20 @@ class TestRunRsync:
         sync, config = _local_sync()
         run_process = _RecordingProcessRunner()
 
-        result = run_rsync(sync, config, dry_run=True, run_process=run_process)
+        result = run_rsync(
+            sync,
+            config,
+            dry_run=True,
+            run_process=run_process,
+            resolved_endpoints={},
+        )
 
         assert result.stdout == "done"
         assert run_process.calls == [
-            (build_rsync_command(sync, config, dry_run=True), None),
+            (
+                build_rsync_command(sync, config, dry_run=True, resolved_endpoints={}),
+                None,
+            ),
         ]
 
     def test_hands_the_output_callback_to_the_process(self) -> None:
@@ -975,7 +1023,13 @@ class TestRunRsync:
         def on_output(chunk: str) -> None:
             pass
 
-        run_rsync(sync, config, on_output=on_output, run_process=run_process)
+        run_rsync(
+            sync,
+            config,
+            on_output=on_output,
+            run_process=run_process,
+            resolved_endpoints={},
+        )
 
         [(_, forwarded)] = run_process.calls
         assert forwarded is on_output

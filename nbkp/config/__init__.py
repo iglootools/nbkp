@@ -8,6 +8,7 @@ from nbkp.config.loader import (
 )
 from nbkp.config.protocol import (
     DEFAULT_SSH_PORT,
+    LOCAL_HOST_SLUG,
     BtrfsSnapshotConfig,
     Config,
     ConfigValidationErrorKind,
@@ -34,6 +35,7 @@ from nbkp.config.protocol import (
 
 __all__ = [
     "DEFAULT_SSH_PORT",
+    "LOCAL_HOST_SLUG",
     "BtrfsSnapshotConfig",
     "Config",
     "ConfigError",

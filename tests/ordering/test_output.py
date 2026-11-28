@@ -90,6 +90,19 @@ class TestBuildRichTreeSectionsSeverity:
         assert "✓" in rendered  # from sync-ab
         assert "sync-bc" in rendered
 
+    def test_a_slug_that_looks_like_markup_is_printed_as_is(self) -> None:
+        # Slug validation forbids brackets; model_copy skips it, as a future
+        # looser slug rule would.
+        config = _two_sync_chain_config()
+        sync = config.syncs["sync-ab"].model_copy(update={"slug": "[red]ab[/red]"})
+        config = config.model_copy(
+            update={"syncs": {**config.syncs, "sync-ab": sync}},
+        )
+
+        rendered = "\n".join(_render(t) for t in build_rich_tree_sections(config))
+
+        assert "[red]ab[/red] -> ep-b" in rendered
+
     def test_error_severity_renders_cross(self) -> None:
         config = _two_sync_chain_config()
         severities = {"sync-ab": Severity.ERROR, "sync-bc": Severity.OK}

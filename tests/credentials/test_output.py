@@ -16,6 +16,20 @@ class TestCredentialErrorMessage:
                 (
                     "No passphrase found in keyring for id 'disk1'."
                     " Store it with: keyring set nbkp disk1"
+                    " (the keyring command is not part of nbkp's install:"
+                    " uv tool install keyring)"
+                ),
+            ),
+            (
+                CredentialError(
+                    CredentialErrorKind.NOT_FOUND,
+                    passphrase_id="my drive",
+                ),
+                (
+                    "No passphrase found in keyring for id 'my drive'."
+                    " Store it with: keyring set nbkp 'my drive'"
+                    " (the keyring command is not part of nbkp's install:"
+                    " uv tool install keyring)"
                 ),
             ),
             (

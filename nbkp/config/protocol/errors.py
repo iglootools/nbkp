@@ -17,6 +17,7 @@ class ConfigValidationErrorKind(StrEnum):
 
     UNKNOWN_REFERENCE = "unknown-reference"
     SLUG_MISMATCH = "slug-mismatch"
+    RESERVED_SLUG = "reserved-slug"
     CIRCULAR_EXTENDS = "circular-extends"
     CIRCULAR_PROXY_JUMP = "circular-proxy-jump"
     MUTUALLY_EXCLUSIVE = "mutually-exclusive"

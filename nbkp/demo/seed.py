@@ -19,11 +19,13 @@ from pydantic import BaseModel, ConfigDict
 
 from nbkp.config import Config, CredentialProvider, RsyncOptions, SshEndpoint
 from nbkp.config.testkit import write_config
+from nbkp.credentials import PassphraseFn
 from nbkp.disks import MountResult, UmountResult, mount_phase, umount_volumes
 from nbkp.policy import Severity
 from nbkp.remote.dispatch import VolumeCommandRunner, run_on_volume
 from nbkp.remote.endpoints import ResolvedEndpoints
-from nbkp.remote.resolution import resolve_all_endpoints
+from nbkp.remote.errors import describe_error, ssh_connection_errors
+from nbkp.remote.resolution import SshConfigError, resolve_all_endpoints
 from nbkp.remote.testkit.constants import (
     BASTION_CONTAINER_NAME,
     LUKS_PASSPHRASE,
@@ -38,9 +40,10 @@ from nbkp.sync.testkit.seed import (
 )
 
 # The 'docker' extra is optional; seed_demo(docker=True) reports it through
-# _check_docker(has_docker) before anything here resolves these lazy names.
+# _check_docker(base_dir, has_docker) before anything here resolves these lazy names.
 lazy from nbkp.remote.testkit.docker import (
     DOCKER_DIR,
+    SEED_SSH_DIR,
     bastion_container_spec,
     build_docker_image,
     check_docker,
@@ -79,6 +82,9 @@ class SeedErrorKind(StrEnum):
     MOUNT_FAILED = "mount-failed"
     UMOUNT_FAILED = "umount-failed"
     FILE_OPERATION_FAILED = "file-operation-failed"
+    SEED_DIR_REUSED = "seed-dir-reused"
+    SSH_FAILED = "ssh-failed"
+    SSH_CONFIG_INVALID = "ssh-config-invalid"
 
 
 # Raised before any container starts.
@@ -87,6 +93,7 @@ _PREREQUISITE_KINDS = frozenset(
         SeedErrorKind.DOCKER_EXTRA_MISSING,
         SeedErrorKind.DOCKER_UNAVAILABLE,
         SeedErrorKind.DOCKER_DIR_MISSING,
+        SeedErrorKind.SEED_DIR_REUSED,
     },
 )
 
@@ -257,16 +264,30 @@ class _Containers:
     storage_port: int
 
 
-def _check_docker(*, has_docker: bool) -> None:
+def _check_docker(base_dir: Path | None, *, has_docker: bool) -> None:
     """Fail before anything is created when the demo cannot use Docker."""
     if not has_docker:
         raise SeedError(SeedErrorKind.DOCKER_EXTRA_MISSING)
+    _require_fresh_seed_dir(base_dir)
     try:
         check_docker()
     except DockerError as e:
         raise SeedError(SeedErrorKind.DOCKER_UNAVAILABLE, e.detail) from e
     if not DOCKER_DIR.is_dir():
         raise SeedError(SeedErrorKind.DOCKER_DIR_MISSING, str(DOCKER_DIR))
+
+
+def _require_fresh_seed_dir(base_dir: Path | None) -> None:
+    """
+    Fail before anything is created when *base_dir* holds an earlier seed's key.
+
+    The demo key is written exclusively, never over an existing one, since it logs
+    into a privileged container: an earlier Docker seed's ``ssh/`` would make the
+    seed fail halfway, after it had looked like the containers were starting.
+    """
+    ssh_dir = base_dir / SEED_SSH_DIR if base_dir is not None else None
+    if ssh_dir is not None and ssh_dir.exists():
+        raise SeedError(SeedErrorKind.SEED_DIR_REUSED, str(ssh_dir))
 
 
 def _seed_dir(base_dir: Path | None) -> Path:
@@ -326,8 +347,8 @@ def seed_demo(
         else RsyncOptions()
     )
     if docker:
-        _check_docker(has_docker=has_docker)
-    try:
+        _check_docker(base_dir, has_docker=has_docker)
+    with as_seed_errors():
         return _seed(
             _seed_dir(base_dir),
             docker=docker,
@@ -337,6 +358,18 @@ def seed_demo(
             credential_provider=credential_provider,
             steps=steps,
         )
+
+
+@contextmanager
+def as_seed_errors() -> Generator[None]:
+    """
+    Raise what a seeding step fails with as a :class:`SeedError` of its kind.
+
+    Covers every failure the steps report: Docker, SSH (a dropped connection, a
+    refused key), the user's SSH config, a command in a container, the files.
+    """
+    try:
+        yield
     except DockerError as e:
         raise SeedError(SeedErrorKind.DOCKER_FAILED, e.detail) from e
     except TimeoutError as e:
@@ -346,9 +379,15 @@ def seed_demo(
             SeedErrorKind.REMOTE_COMMAND_FAILED,
             _called_process_detail(e),
         ) from e
+    except SshConfigError as e:
+        raise SeedError(SeedErrorKind.SSH_CONFIG_INVALID, str(e)) from e
     # After TimeoutError, which is an OSError too.
     except OSError as e:
         raise SeedError(SeedErrorKind.FILE_OPERATION_FAILED, str(e)) from e
+    # Past OSError, what is left of these is the SSH failures that are not
+    # OSErrors: a protocol error, a refused key, a connection lost mid-command.
+    except ssh_connection_errors() as e:
+        raise SeedError(SeedErrorKind.SSH_FAILED, describe_error(e)) from e
 
 
 def _called_process_detail(e: subprocess.CalledProcessError) -> str:
@@ -508,7 +547,7 @@ def encrypted_volume_mounted(
     config: Config,
     resolved: ResolvedEndpoints,
     *,
-    passphrase_fn: Callable[[str], str] = lambda _: LUKS_PASSPHRASE,
+    passphrase_fn: PassphraseFn = lambda _: LUKS_PASSPHRASE,
     run: VolumeCommandRunner = run_on_volume,
     on_step_start: Callable[[str], None] | None = None,
     on_step_end: Callable[[str, Severity, str | None], None] | None = None,

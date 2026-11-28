@@ -77,7 +77,9 @@ failed syncs, possibly incomplete, and counting them would cost complete
 snapshots their place; orphan cleanup removes the hard-link ones. When a
 deletion fails partway, the snapshots
 already deleted are still reported (`pruned_paths` in `run`, `deleted` in
-`snapshots prune`, whose `kept` is then counted afresh). Pruning can also be
+`snapshots prune`, whose `kept` is then counted afresh). A count that fails
+after the deletions is the result's error, with `kept` unknown (`null` in JSON,
+`?` in the table), never 0. Pruning can also be
 triggered manually with the `snapshots prune` command. Deleting a btrfs snapshot
 first clears its read-only flag, which `user_subvol_rm_allowed` requires. When
 the delete then fails, nbkp sets the flag again, so a snapshot that stays is
@@ -90,13 +92,18 @@ newer than the snapshot `latest` points to: one left behind by a previously
 failed sync. While `latest` points to `/dev/null`, no sync has completed yet, so
 every snapshot directory is an orphan: a first run interrupted before `latest`
 moved leaves a partial snapshot, which would otherwise sort before the next
-complete one and pass for complete. When `latest` is absent, the cleanup deletes
+complete one and pass for complete. An orphan that cannot be removed fails the
+sync (`failure`: `orphan-cleanup`) before a new snapshot is made: the new one
+would move `latest` past the orphan, out of the cleanup's reach, and retention
+and `snapshots show` would then count the incomplete tree as a backup. When
+`latest` is absent, the cleanup deletes
 nothing and records an `orphan-cleanup` warning: nbkp never removes the link
 (`init` points it at `/dev/null`), so its absence is outside damage, and the
 snapshots may well be complete. Preflight reports the missing link, so only
 `--strictness ignore-all` attempts such a sync. The generated script does the
-same: it removes every snapshot when `latest` points to `/dev/null`, and skips
-the cleanup when it cannot read `latest`. After a failed rsync
+same: it removes every snapshot when `latest` points to `/dev/null`, fails the
+sync when a removal fails, and skips the cleanup when it cannot read `latest`.
+After a failed rsync
 the new snapshot directory is also removed straight away. Btrfs snapshots do not
 need orphan cleanup because snapshots are created atomically from a complete
 sync to `staging/` — a failed sync leaves `staging/` in a partial state but
@@ -108,13 +115,16 @@ set by NTP, a manual change) or the name would equal it (two runs within the
 same name resolution), the sync fails before writing — `failure`: `mkdir` for
 hard-link, `snapshot` for btrfs — and `latest` stays where it was. Otherwise
 `latest` would move back in time, and the next orphan cleanup would remove every
-complete snapshot newer than it. The generated script applies the same rule.
+complete snapshot newer than it. A dry run applies the check too, since it only
+reads `latest`, so it fails where the real run would. The generated script
+applies the same rule.
 
-**Best-effort steps** — Orphan cleanup, pruning, and removal of the snapshot
-directory after a failed rsync never fail a sync: the snapshot that matters is
-either complete (pruning runs after `latest` moved) or absent, and a leftover
-directory is removed by the next run's orphan cleanup. A failure in one of these
-steps is recorded as a warning on the sync's result (`warnings` in JSON, a
+**Best-effort steps** — Pruning, removal of the snapshot directory after a
+failed rsync, and orphan cleanup when `latest` is absent or the listing fails
+never fail a sync: the snapshot that matters is either complete (pruning runs
+after `latest` moved) or absent, and a leftover directory is removed by the next
+run's orphan cleanup, which fails that run if it cannot. A failure in one of
+these steps is recorded as a warning on the sync's result (`warnings` in JSON, a
 `Warning:` line in the results table) instead of being silently ignored, and the
 remaining syncs carry on.
 
@@ -187,29 +197,31 @@ way to get there. Other commands do the same damage from the side: a
 from under a run, and a run's umount pulls it from under a `snapshots prune`
 that is deleting snapshots on it.
 
-Every command that mounts or umounts a drive, or modifies a destination,
-therefore holds an exclusive, non-blocking `flock(2)` on
+Every command that mounts (and so later umounts) a drive, or modifies a
+destination, therefore holds an exclusive, non-blocking `flock(2)` on
 `$XDG_STATE_HOME/nbkp/run.lock` (`~/.local/state/nbkp/run.lock` when
 `XDG_STATE_HOME` is unset, empty or relative):
 
 | Command | Holds the lock |
 |---|---|
-| `run` | from before the first mount to after the last umount |
-| `snapshots prune` | the same, and also with `--no-mount --no-umount`, since it deletes snapshots |
-| `snapshots show`, `preflight check`, `preflight troubleshoot` | from before the first mount to after the last umount |
+| `run` (not `--dry-run`) | from before the first mount to after the last umount, always, since it writes destinations |
+| `snapshots prune` (not `--dry-run`) | the same, always, since it deletes snapshots |
+| `run --dry-run`, `snapshots prune --dry-run`, `snapshots show`, `preflight check`, `preflight troubleshoot` | from before the first mount to after the last umount, when they mount: `--mount` is on (the default) and a mount-managed volume is in scope |
 | `disks mount`, `disks umount` | while they unlock and mount, or umount and lock; drives `disks mount` mounted stay mounted after it exits, unlocked |
 
-A command that neither mounts, umounts nor writes runs without it, alongside
-anything else: a dry run (`run --dry-run`, `snapshots prune --dry-run`) or a
-check with `--no-mount --no-umount`, and `disks mount --dry-run` /
-`disks umount --dry-run`, `disks status`, `config show`. A dry run that mounts
-or umounts still takes it.
+A command that neither mounts nor writes runs without it, alongside anything
+else: a dry run or a check whose config has no mount-managed volume in scope, or
+that runs with `--no-mount` (which skips the umount too), and
+`disks mount --dry-run` / `disks umount --dry-run`, `disks status`,
+`config show`. A dry run or check that mounts a drive still takes it.
 
 When another command holds the lock, the command stops before mounting,
 prompting for a passphrase or checking anything and exits 1 with
 `another nbkp command (a run, a mount, a prune, …) is in progress` on stderr, or
 a JSON `{"error": ...}` object (reason `run-in-progress`, with `lock_path`)
-under `-o json`: wait for the other command to finish. A lock file that cannot
+under `-o json`: wait for the other command to finish. A command that holds
+the lock only to mount (a dry run, a check, `snapshots show`) also says that
+`--no-mount` lets it run alongside. A lock file that cannot
 be created or locked fails the same way (reason `run-lock-unavailable`) rather
 than running unprotected. The lock goes with the process, so a command that is
 killed releases it; there is no stale lock to remove. The lock is per user and
@@ -316,7 +328,7 @@ prompted once per unique passphrase-id even if multiple volumes share it.
 
 **Passphrase prefetching** — Before the first device is touched, nbkp retrieves
 *every* passphrase-id the config declares — including the ones this run has no
-use for, because their drive is not plugged in or `--name` excluded them. All
+use for, because their drive is not plugged in or `--volume` excluded them. All
 credential-store access therefore happens up front, in one burst. See
 [Why prefetch every passphrase](#why-prefetch-every-passphrase).
 
@@ -537,7 +549,7 @@ deliberately including the ones it does not need:
   subsequent runs are unattended.
 - **It happens before device probing and mounting**, so the approval prompts
   arrive together at the start rather than interleaved with mount output.
-- **It is not filtered by `--name`.** Narrowing the mount set would defeat the
+- **It is not filtered by `--volume`.** Narrowing the mount set would defeat the
   purpose.
 - **It is best-effort.** A passphrase that cannot be retrieved is reported as a
   warning and skipped, not fatal. Missing credentials only matter for a drive
@@ -587,7 +599,14 @@ place. The `preflight check` command runs these validations independently; the
 Checks include:
 
 - **Sentinel files** — `.nbkp-vol`, `.nbkp-src`, `.nbkp-dst` must exist at the
-  expected paths
+  expected paths. A missing sentinel makes the volume or endpoint inactive (an
+  absent drive); a sentinel behind a directory the user cannot search
+  (`SENTINEL_UNREADABLE`) may well be there, so it is an infrastructure error
+  instead. `test -f` cannot tell the two apart, so on a remote host a failed
+  `test -f` is followed by a probe of the nearest existing directory on the
+  sentinel's path (`NEAREST_DIR_SEARCHABLE_SCRIPT`, shared with the `sh`
+  script): absent only when that directory is searchable. When an endpoint's
+  sentinel cannot be read, nothing else in its directory is probed.
 - **SSH connectivity** — Remote endpoints must be reachable; DNS resolution must
   succeed. A connection failure is `UNREACHABLE` (inactive) and records its
   cause; a host that answers but refuses our key, or whose host key is unknown
@@ -602,8 +621,10 @@ Checks include:
   lost later in preflight (each remote command connects anew, so a host can fall
   asleep half-way) makes the volume or sync endpoint being probed unreachable in
   the same way, with its cause, instead of aborting the checks of every other
-  host. Any other exception during the probe is a bug and propagates instead of
-  being reported as an unreachable host.
+  host. The host itself is then reported `UNREACHABLE` in the result, and the
+  volume inactive, so the SSH table and `troubleshoot` show the drop rather than
+  only the cascade it leaves on the syncs. Any other exception during the probe
+  is a bug and propagates instead of being reported as an unreachable host.
 - **Rsync availability** — rsync must be installed and version 3.0+ (macOS
   `openrsync` is rejected). Host tool errors apply to localhost too: a remote
   host's errors cascade to its volumes (`SSH_ENDPOINT_INACTIVE`), while the
@@ -727,8 +748,9 @@ file (relative to the current directory), endpoint-selection flags,
 `--strictness` and `--no-mount` — for step-by-step fixes. It cannot carry
 `--sync`, which `troubleshoot` does not take. In JSON mode the command is the
 `hint` field.
-`snapshots show` / `prune` (when a sync failed preflight) and `disks mount` /
-`umount` (when a volume failed) print the same suggestion, in human output only:
+`preflight check`, `snapshots show` / `prune` (when a sync failed preflight)
+and `disks mount` / `umount` (when a volume failed) print the same suggestion,
+carrying the flags each of them takes; the last three in human output only:
 their JSON output is a bare list, with no object to carry a `hint` field.
 
 **`snapshots show` / `snapshots prune`** — accept the same `--strictness`. A
@@ -990,11 +1012,12 @@ does on their system.
 | Command | Purpose |
 |---|---|
 | `test -f <path>` | Sentinel file existence (`.nbkp-vol`, `.nbkp-src`, `.nbkp-dst`) |
+| `sh -c <script> sh <path>` | After a failed `test -f`, tell a missing sentinel from one behind an unsearchable directory (`NEAREST_DIR_SEARCHABLE_SCRIPT`) |
 | `test -d <path>` | Directory existence |
 | `test -w <path>` | Directory writability |
-| `test -L <path>` | Symlink existence (`latest`) |
+| `test -L <path>` | Tell an absent `latest` from an unreadable one, once `readlink` failed |
 | `test -e /dev/disk/by-uuid/<UUID>` | Drive detection (mount management) |
-| `which <command>` | Command availability (rsync, btrfs, stat, findmnt, udisksctl, lsblk) |
+| `sh -c 'command -v "$1"' sh <command>` | Command availability on a remote host (rsync, btrfs, stat, findmnt, udisksctl, lsblk): the shell builtin, since minimal hosts ship no `which`. A local host is looked up in-process |
 | `rsync --version` | Rsync version check (>= 3.0, reject macOS openrsync) |
 | `stat -f -c %T <path>` | Detect the filesystem type (btrfs, FAT/exFAT under hard links) |
 | `df -P <path>`, `mount` | Detect the filesystem type of a local volume on macOS |
@@ -1013,7 +1036,7 @@ does on their system.
 | Command | Purpose |
 |---|---|
 | `rsync -a --delete --delete-excluded --partial-dir=.rsync-partial --safe-links ...` | Data sync with default flags |
-| `--filter=H .nbkp-*` / `--filter=P .nbkp-*` | Hide/protect sentinel files during transfer |
+| `--filter=H .nbkp-*` / `--filter=P .nbkp-*` | Hide/protect sentinel files during transfer; always emitted, even with `default-options-override` |
 | `--compress`, `--checksum` | Optional per-sync flags |
 | `--link-dest=<prev-snapshot>` | Hard-link snapshots: reference previous snapshot for deduplication |
 | `-e ssh ...` | SSH transport for remote syncs |
@@ -1066,7 +1089,10 @@ mount lifecycle) run over Fabric/Paramiko. Within one `nbkp` invocation they
 share a single connection per endpoint and proxy chain: it is opened on first
 use and closed when the command ends, after unmounting. A reused connection
 found dead is replaced, and a command it failed to start is retried once on the
-new connection. rsync opens its own `ssh` process for each sync.
+new connection. A connection lost after the command started is never retried,
+since the command may have done its work; like a connection that fails to open,
+it is reported as an unreachable host, never as the command's answer. rsync
+opens its own `ssh` process for each sync.
 
 SSH arguments are constructed dynamically per endpoint. Common options:
 

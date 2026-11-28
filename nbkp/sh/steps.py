@@ -10,14 +10,30 @@ hard-link rsync, each of which only logs a warning, and files that vanished
 during the transfer under ``vanished-files: warn``).
 """
 
+import posixpath
 from dataclasses import dataclass
 from textwrap import dedent
 
 from nbkp.config import LocalVolume, RemoteVolume
-from nbkp.fsprotocol import SNAPSHOTS_DIR, STAGING_DIR
+from nbkp.fsprotocol import LATEST_LINK, SNAPSHOTS_DIR, STAGING_DIR
 from nbkp.sh.commands import snapshot_date_format, vol_cmd
-from nbkp.sh.quoting import INDENT, SNAP, SNAPSHOT_TS, format_command, quote
+from nbkp.sh.quoting import (
+    INDENT,
+    PID,
+    SNAP,
+    SNAPSHOT_TS,
+    format_command,
+    quote,
+    quote_args,
+)
 from nbkp.sh.spec import SyncSpec
+from nbkp.snapshots.btrfs import build_create_snapshot_args
+from nbkp.snapshots.common import build_update_latest_args
+from nbkp.snapshots.hardlinks import (
+    build_mkdir_snapshot_args,
+    build_owner_rwx_dirs_args,
+    build_rm_tree_args,
+)
 from nbkp.sync.rsync import (
     RSYNC_VANISHED_FILES_EXIT,
     build_rsync_command,
@@ -93,7 +109,17 @@ def _list_snapshots(spec: SyncSpec, *, quiet: bool = False) -> str:
 
 
 def _rm_snapshot(spec: SyncSpec, name: str) -> str:
-    return _on_dst(spec, ["rm", "-rf", f"{spec.snapshots_dir}/{name}"])
+    """
+    Delete a hard-link snapshot, as ``delete_snapshot`` does.
+
+    When the plain deletion fails (read-only directories that ``rsync -a``
+    preserved), its directories get their owner's ``rwx`` and the deletion is
+    retried.
+    """
+    path = f"{spec.snapshots_dir}/{name}"
+    rm = _on_dst(spec, build_rm_tree_args(path))
+    open_dirs = _on_dst(spec, build_owner_rwx_dirs_args(path))
+    return f"{{ {rm} || {{ {open_dirs} && {rm}; }}; }}"
 
 
 def _indent(text: str, levels: int) -> str:
@@ -107,12 +133,13 @@ def _orphan_cleanup_block(spec: SyncSpec) -> str:
 
     And all of them while ``latest`` points to ``/dev/null``, as in ``nbkp run``.
 
-    Best-effort, as in ``nbkp run``: a failed removal is only a warning.
-    A ``latest`` that cannot be read, absent or not, skips the cleanup, as
-    ``nbkp run`` skips it when the link is absent.
+    As in ``nbkp run``, a failed removal fails the sync before a new snapshot
+    is made, so ``latest`` never moves past an incomplete snapshot. A
+    ``latest`` that cannot be read, absent or not, skips the cleanup, as
+    ``nbkp run`` skips it, with a warning, when the link is absent.
     """
     rm = _rm_snapshot(spec, SNAP)
-    warn = 'nbkp_log "WARN: failed to remove orphaned snapshot: $snap"'
+    fail = '{ nbkp_log "ERROR: failed to remove orphaned snapshot: $snap"; false; }'
     return dedent(f"""\
         if [ "$NBKP_DRY_RUN" = false ]; then
             NBKP_LATEST_LINK={_readlink_latest(spec)}
@@ -122,7 +149,7 @@ def _orphan_cleanup_block(spec: SyncSpec) -> str:
                     if [ "$NBKP_LATEST_LINK" = "/dev/null" ] \\
                         || nbkp_snapshot_after "$snap" "$NBKP_LATEST_NAME"; then
                         nbkp_log "Removing orphaned snapshot: $snap"
-                        {rm} || {warn}
+                        {rm} || {fail}
                     fi
                 done
             fi
@@ -156,7 +183,8 @@ def _after_latest_guard(spec: SyncSpec) -> str:
     clock behind would move ``latest`` back in time, and the next orphan
     cleanup would remove every complete snapshot after it; an equal name
     would reuse the latest snapshot.  ``nbkp_snapshot_after`` compares the
-    names by time, whichever name form each uses.
+    names by time, whichever name form each uses. Run in dry runs too, as in
+    ``nbkp run``: it only reads ``latest``.
     """
     error = (
         "ERROR: new snapshot $NBKP_TS would not be after the latest"
@@ -182,12 +210,15 @@ def _mkdir_block(spec: SyncSpec) -> str:
     then remove it.
     """
     mkdir_parent = _on_dst(spec, ["mkdir", "-p", spec.snapshots_dir])
-    mkdir = _on_dst(spec, ["mkdir", f"{spec.snapshots_dir}/{SNAPSHOT_TS}"])
+    mkdir = _on_dst(
+        spec,
+        build_mkdir_snapshot_args(f"{spec.snapshots_dir}/{SNAPSHOT_TS}"),
+    )
     return "\n".join(
         [
             _timestamp_line(spec),
+            _after_latest_guard(spec),
             'if [ "$NBKP_DRY_RUN" = false ]; then',
-            _indent(_after_latest_guard(spec), 1),
             _indent(mkdir_parent, 1),
             _indent(mkdir, 1),
             "fi",
@@ -297,20 +328,16 @@ def _rsync_failure_cleanup(spec: SyncSpec) -> list[str]:
 def _btrfs_snapshot_block(spec: SyncSpec) -> str:
     snap = _on_dst(
         spec,
-        [
-            "btrfs",
-            "subvolume",
-            "snapshot",
-            "-r",
+        build_create_snapshot_args(
             spec.staging_dir,
             f"{spec.snapshots_dir}/{SNAPSHOT_TS}",
-        ],
+        ),
     )
     return "\n".join(
         [
+            _timestamp_line(spec),
+            _after_latest_guard(spec),
             'if [ "$NBKP_DRY_RUN" = false ]; then',
-            _indent(_timestamp_line(spec), 1),
-            _indent(_after_latest_guard(spec), 1),
             _indent(snap, 1),
             "fi",
         ],
@@ -318,14 +345,36 @@ def _btrfs_snapshot_block(spec: SyncSpec) -> str:
 
 
 def _symlink_block(spec: SyncSpec) -> str:
-    ln = _on_dst(
-        spec,
-        ["ln", "-sfn", f"{SNAPSHOTS_DIR}/{SNAPSHOT_TS}", spec.dst_latest],
+    update = "\n".join(_update_latest_cmds(spec))
+    return "\n".join(
+        ['if [ "$NBKP_DRY_RUN" = false ]; then', _indent(update, 1), "fi"],
     )
-    return dedent(f"""\
-        if [ "$NBKP_DRY_RUN" = false ]; then
-            {ln}
-        fi""")
+
+
+def _update_latest_cmds(spec: SyncSpec) -> list[str]:
+    """
+    Point ``latest`` at the new snapshot, as ``update_latest_symlink`` does.
+
+    A local ``latest`` is replaced atomically: the link is made under a temporary
+    name and renamed over it, so an interruption leaves the old link or the new
+    one, never none. ``mv`` is told not to follow ``latest`` into the snapshot it
+    points to (``-T`` in GNU mv, ``-h`` in BSD mv). Two lines rather than an
+    ``&&`` list, so that ``set -e`` stops on a failed ``ln`` too. A remote
+    ``latest`` is replaced with ``ln -sfn``, as in ``nbkp run``.
+    """
+    target = f"{SNAPSHOTS_DIR}/{SNAPSHOT_TS}"
+    match spec.dst_vol:
+        case LocalVolume():
+            tmp = f"{posixpath.dirname(spec.dst_latest)}/.{LATEST_LINK}.nbkp-tmp-{PID}"
+            no_follow = "-T" if spec.platform.startswith("linux") else "-h"
+            mv = quote_args(["mv", "-f", no_follow, tmp, spec.dst_latest])
+            rm_tmp = quote_args(["rm", "-f", tmp])
+            return [
+                quote_args(["ln", "-sfn", target, tmp]),
+                f"{mv} || {{ {rm_tmp}; false; }}",
+            ]
+        case RemoteVolume():
+            return [_on_dst(spec, build_update_latest_args(target, spec.dst_latest))]
 
 
 def _delete_snapshot_cmds(spec: SyncSpec) -> list[str]:
@@ -343,7 +392,7 @@ def _delete_snapshot_cmds(spec: SyncSpec) -> list[str]:
                 f"{delete} || {{ {restore} || {left_writable}; false; }}",
             ]
         case _:
-            return [_on_dst(spec, ["rm", "-rf", path])]
+            return [_rm_snapshot(spec, SNAP)]
 
 
 # Whether $snap is newer than the snapshot `latest` designates (never while

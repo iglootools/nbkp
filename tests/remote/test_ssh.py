@@ -18,6 +18,7 @@ from nbkp.remote import (
     run_remote_command,
 )
 from nbkp.remote.endpoints import ResolvedEndpoint
+from nbkp.remote.fabricssh import ConnectionLostError
 from nbkp.remote.pool import connection_scope
 from nbkp.remote.ssh import wrap_cmd
 
@@ -527,6 +528,7 @@ class _Channel:
 
     *reads_input* False is a command that exits without reading it: the
     channel is already closed when the input is sent, as Paramiko reports.
+    *transport_active* False is a connection that dropped while it ran.
     """
 
     def __init__(
@@ -536,11 +538,13 @@ class _Channel:
         exit_status: int = 0,
         *,
         reads_input: bool = True,
+        transport_active: bool = True,
     ) -> None:
         self.stdout = stdout
         self.stderr = stderr
         self.exit_status = exit_status
         self.reads_input = reads_input
+        self.transport = _ChannelTransport(active=transport_active)
         self.command: str | None = None
         self.received = b""
         self.input_closed = False
@@ -566,8 +570,21 @@ class _Channel:
     def recv_exit_status(self) -> int:
         return self.exit_status
 
+    def get_transport(self) -> _ChannelTransport:
+        return self.transport
+
     def close(self) -> None:
         self.closed = True
+
+
+class _ChannelTransport:
+    """The Paramiko transport a channel runs on: up, or dropped."""
+
+    def __init__(self, *, active: bool) -> None:
+        self.active = active
+
+    def is_active(self) -> bool:
+        return self.active
 
 
 def _leave_as_built(conn: MagicMock) -> None:
@@ -657,6 +674,29 @@ class TestRunRemoteCommand:
         assert result.returncode == 0
         assert result.stdout == "file1\nfile2\n"
         assert result.stderr == ""
+
+    def test_connection_lost_mid_command_raises(
+        self,
+        mock_conn_cls: MagicMock,
+        ssh_endpoint: SshEndpoint,
+    ) -> None:
+        channel = _Channel(exit_status=-1, transport_active=False)
+        mock_conn_cls.configure = partial(_answer_with, channel)
+
+        with pytest.raises(ConnectionLostError):
+            run_remote_command(ssh_endpoint, ["udisksctl", "unlock"])
+
+    def test_command_killed_by_a_signal_keeps_the_missing_status(
+        self,
+        mock_conn_cls: MagicMock,
+        ssh_endpoint: SshEndpoint,
+    ) -> None:
+        channel = _Channel(exit_status=-1, transport_active=True)
+        mock_conn_cls.configure = partial(_answer_with, channel)
+
+        result = run_remote_command(ssh_endpoint, ["sleep", "100"])
+
+        assert result.returncode == -1
 
     def test_channel_timeout_and_disabled_algorithms(
         self,
@@ -863,6 +903,24 @@ class TestRunRemoteCommandInScope:
             fresh.create_session.assert_called_once()
             assert result.returncode == 0
             assert result.stdout == "ok\n"
+
+    def test_a_connection_lost_mid_command_is_not_retried(
+        self,
+        mock_conn_cls: MagicMock,
+    ) -> None:
+        """The command started and may have done its work: rerunning is unsafe."""
+        with connection_scope():
+            run_remote_command(_TARGET, ["true"])
+            (stale,) = _built(mock_conn_cls, "target.example.com")
+            stale.create_session.return_value = _Channel(
+                exit_status=-1,
+                transport_active=False,
+            )
+            with pytest.raises(ConnectionLostError):
+                run_remote_command(_TARGET, ["rm", "-rf", "/backup/old"])
+
+            stale.close.assert_called_once()
+            assert _built(mock_conn_cls, "target.example.com") == [stale]
 
     def test_a_fresh_connection_failure_is_not_retried(
         self,

@@ -23,11 +23,13 @@ from nbkp.preflight import (
     SshEndpointStatus,
     SyncErrorKind,
     SyncStatus,
+    VolumeDiagnostics,
     VolumeErrorKind,
     VolumeStatus,
 )
 from nbkp.preflight.testkit.common import (
     LOCALHOST_SSH_STATUS,
+    SENTINEL_MISSING_CAPS,
     inactive_dst_ep_status,
     standalone_ssh_status,
 )
@@ -174,6 +176,90 @@ MISSING_SENTINELS = Scenario(
     volumes=(LocalVolume(slug="usb-2", path="/mnt/usb-2"),),
     sync_endpoints=(SyncEndpoint(slug="dst-sentinels", volume="usb-2"),),
     syncs=(sync_from_laptop("missing-sentinels", "dst-sentinels"),),
+)
+
+
+def _unreadable_sentinels_statuses(
+    config: Config,
+    shared: SharedStatuses,
+) -> ScenarioStatuses:
+    # Sentinels behind a directory nbkp cannot search: endpoints (Layer 3)
+    # and a volume (Layer 2), fatal rather than expected-inactive.
+    usb_unreadable = volume_status(
+        config,
+        "usb-unreadable",
+        LOCALHOST_SSH_STATUS,
+        healthy_caps(),
+    )
+    usb_hidden = VolumeStatus(
+        slug="usb-hidden",
+        config=config.volumes["usb-hidden"],
+        ssh_endpoint_status=LOCALHOST_SSH_STATUS,
+        diagnostics=VolumeDiagnostics(
+            capabilities=SENTINEL_MISSING_CAPS,
+            sentinel_unreadable="Permission denied",
+        ),
+        errors=[VolumeErrorKind.SENTINEL_UNREADABLE],
+    )
+    return ScenarioStatuses(
+        volumes=(usb_unreadable, usb_hidden),
+        syncs=(
+            SyncStatus(
+                slug="unreadable-sentinels",
+                config=config.syncs["unreadable-sentinels"],
+                source_endpoint_status=SourceEndpointStatus(
+                    endpoint_slug=LAPTOP_SRC,
+                    volume_status=shared.laptop_active,
+                    diagnostics=SourceEndpointDiagnostics(
+                        endpoint_slug=LAPTOP_SRC,
+                        sentinel_exists=False,
+                        sentinel_unreadable="Permission denied",
+                    ),
+                    errors=[SourceEndpointErrorKind.SENTINEL_UNREADABLE],
+                ),
+                destination_endpoint_status=DestinationEndpointStatus(
+                    endpoint_slug="dst-unreadable",
+                    volume_status=usb_unreadable,
+                    diagnostics=DestinationEndpointDiagnostics(
+                        endpoint_slug="dst-unreadable",
+                        sentinel_exists=False,
+                        sentinel_unreadable=(
+                            "/mnt/usb-unreadable/backup is not searchable"
+                        ),
+                        endpoint_writable=False,
+                    ),
+                    errors=[DestinationEndpointErrorKind.SENTINEL_UNREADABLE],
+                ),
+                errors=list(BOTH_ENDPOINTS_INACTIVE),
+            ),
+            SyncStatus(
+                slug="unreadable-volume",
+                config=config.syncs["unreadable-volume"],
+                source_endpoint_status=shared.laptop_src_inactive,
+                destination_endpoint_status=inactive_dst_ep_status(
+                    "dst-hidden",
+                    usb_hidden,
+                ),
+                errors=list(BOTH_ENDPOINTS_INACTIVE),
+            ),
+        ),
+    )
+
+
+UNREADABLE_SENTINELS = Scenario(
+    statuses=_unreadable_sentinels_statuses,
+    volumes=(
+        LocalVolume(slug="usb-unreadable", path="/mnt/usb-unreadable"),
+        LocalVolume(slug="usb-hidden", path="/mnt/usb-hidden"),
+    ),
+    sync_endpoints=(
+        SyncEndpoint(slug="dst-unreadable", volume="usb-unreadable", subdir="backup"),
+        SyncEndpoint(slug="dst-hidden", volume="usb-hidden"),
+    ),
+    syncs=(
+        sync_from_laptop("unreadable-sentinels", "dst-unreadable"),
+        sync_from_laptop("unreadable-volume", "dst-hidden"),
+    ),
 )
 
 # home-nas: location excluded

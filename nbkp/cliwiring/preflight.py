@@ -10,10 +10,6 @@ from collections.abc import Collection, Sequence
 from contextlib import nullcontext
 from functools import partial
 
-from rich.console import Console
-
-from nbkp.cliwiring.invocation import Invocation
-from nbkp.cliwiring.output_format import OutputFormat
 from nbkp.cliwiring.progress import StepProgressBar
 from nbkp.cliwiring.runtime import Runtime
 from nbkp.config import Config
@@ -24,10 +20,9 @@ from nbkp.preflight import (
     PreflightResult,
     check_all_syncs,
     check_step_count,
-    has_fatal_errors,
     severity_for_errors,
 )
-from nbkp.preflight.output import format_human_check, format_problems
+from nbkp.preflight.output import format_problems
 from nbkp.remote.endpoints import ResolvedEndpoints
 
 
@@ -94,51 +89,3 @@ def check_all_with_progress(
             run=runtime.run,
             which=runtime.which,
         )
-
-
-def check_and_display(
-    cfg: Config,
-    output_format: OutputFormat,
-    strictness: Strictness,
-    only_syncs: list[str] | None = None,
-    *,
-    resolved_endpoints: ResolvedEndpoints,
-    dry_run: bool = False,
-    mount_observations: dict[str, MountObservation] | None = None,
-    invocation: Invocation,
-    exclude_locations: Collection[str] = (),
-    runtime: Runtime,
-) -> tuple[PreflightResult, bool]:
-    """
-    Compute statuses, display human output, and check for errors.
-
-    Returns the preflight result and whether there are fatal errors.
-    When *only_syncs* is given, only those syncs (and the volumes
-    they reference) are checked.
-    """
-    preflight = check_all_with_progress(
-        cfg,
-        use_progress=output_format is OutputFormat.HUMAN,
-        only_syncs=only_syncs,
-        resolved_endpoints=resolved_endpoints,
-        dry_run=dry_run,
-        mount_observations=mount_observations,
-        strictness=strictness,
-        exclude_locations=exclude_locations,
-        runtime=runtime,
-    )
-
-    if output_format is OutputFormat.HUMAN:
-        Console().print(
-            format_human_check(
-                preflight.ssh_endpoint_statuses,
-                preflight.volume_statuses,
-                preflight.sync_statuses,
-                cfg,
-                resolved_endpoints=resolved_endpoints,
-                strictness=strictness,
-                invocation=invocation,
-            ),
-        )
-
-    return preflight, has_fatal_errors(preflight.sync_statuses, strictness=strictness)

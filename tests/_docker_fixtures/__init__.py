@@ -47,6 +47,8 @@ from nbkp.remote.testkit.docker import (
     REMOTE_BACKUP_PATH,
     REMOTE_BTRFS_ENCRYPTED_PATH,
     REMOTE_BTRFS_PATH,
+    SSH_PORT,
+    SSH_PORT_ON_LOOPBACK,
     ContainerSpec,
     LuksMetadata,
     bastion_container_spec,
@@ -217,7 +219,6 @@ def _start_test_container(
     """Start a container from *spec* on *network*, once its sshd listens."""
     container = (
         DockerContainer(image)
-        .with_exposed_ports(22)
         .with_kwargs(privileged=spec.privileged)
         # Generous startup timeout: the entrypoint formats a btrfs loop image and
         # brings up dbus/udevd/udisksd before sshd logs "Server listening".  On a
@@ -227,6 +228,9 @@ def _start_test_container(
             LogMessageWaitStrategy("Server listening").with_startup_timeout(90),
         )
     )
+    # with_bind_ports takes a port, not an address: set the binding Docker's SDK
+    # receives as is, so sshd is on loopback, as the demo publishes it.
+    container.ports[SSH_PORT] = SSH_PORT_ON_LOOPBACK  # pyright: ignore[reportArgumentType] -- testcontainers types the host side as a port alone, though it passes it to Docker's SDK, which also takes (address, port)
     for host, (path, mode) in spec.binds.items():
         container = container.with_volume_mapping(host, path, mode)
     for key, value in spec.environment.items():

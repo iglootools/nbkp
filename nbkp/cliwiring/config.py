@@ -15,7 +15,6 @@ from nbkp.remote.endpoints import EndpointFilter, NetworkType, ResolvedEndpoints
 from nbkp.remote.resolution import (
     SshConfigError,
     SshConfigErrorKind,
-    default_ssh_config_path,
     resolve_all_endpoints,
 )
 
@@ -136,27 +135,26 @@ def resolve_endpoints(
     exclude_locations: list[str] | None,
     network: NetworkType | None,
     output_format: OutputFormat = OutputFormat.HUMAN,
+    *,
+    ssh_config_path: Path,
 ) -> ResolvedEndpoints:
     """
     Resolve the endpoints, or exit 2 on an SSH config value nbkp cannot use.
 
-    Exit with code 2, like a config error, when the user's SSH config gives a host a
-    value nbkp cannot use.
+    *ssh_config_path* is the OpenSSH client config to read (the runtime's
+    :meth:`~.runtime.Runtime.ssh_config_path`). Exit with code 2, like a config
+    error, naming that file, when it gives a host a value nbkp cannot use.
     """
     _require_known_locations(cfg, locations, exclude_locations, output_format)
     ef = build_endpoint_filter(locations, exclude_locations, network)
     try:
-        return resolve_all_endpoints(cfg, ef)
+        return resolve_all_endpoints(cfg, ef, ssh_config_path=ssh_config_path)
     except SshConfigError as e:
-        _exit_on_config_error(_ssh_config_error(e), output_format)
+        _exit_on_config_error(_ssh_config_error(e, ssh_config_path), output_format)
 
 
-def _ssh_config_error(e: SshConfigError) -> ConfigError:
+def _ssh_config_error(e: SshConfigError, path: Path) -> ConfigError:
     match e.kind:
         case SshConfigErrorKind.INVALID_PORT:
             detail = f"Port {e.value!r} for host '{e.host}' is not a number"
-    return ConfigError(
-        ConfigErrorKind.INVALID_SSH_CONFIG,
-        path=default_ssh_config_path(),
-        detail=detail,
-    )
+    return ConfigError(ConfigErrorKind.INVALID_SSH_CONFIG, path=path, detail=detail)

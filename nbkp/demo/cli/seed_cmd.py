@@ -11,6 +11,7 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.text import Text
 
+from nbkp.cliwiring.options import expand_user_path
 from nbkp.cliwiring.progress import StepProgressBar
 from nbkp.config import CredentialProvider
 from nbkp.disks import MountResult, UmountResult
@@ -32,6 +33,7 @@ lazy from nbkp.remote.testkit.constants import (
 )
 
 _console = Console()
+_err_console = Console(stderr=True)
 
 
 def _luks_setup_instructions(provider: CredentialProvider) -> list[str]:
@@ -110,7 +112,7 @@ def seed_cmd(
             " temp folder. Created if it does not exist.",
             file_okay=False,
             dir_okay=True,
-            resolve_path=True,
+            callback=expand_user_path,
         ),
     ] = None,
     dry_run: Annotated[
@@ -178,6 +180,15 @@ def format_seed_error(e: SeedError) -> str:
             )
         case SeedErrorKind.FILE_OPERATION_FAILED:
             return f"Writing the demo files failed: {e.detail}"
+        case SeedErrorKind.SSH_FAILED:
+            return f"SSH to a demo container failed: {e.detail}"
+        case SeedErrorKind.SSH_CONFIG_INVALID:
+            return f"Your SSH config has a value nbkp cannot use: {e.detail}"
+        case SeedErrorKind.SEED_DIR_REUSED:
+            return (
+                f"{e.detail} is left from an earlier seed. Tear that demo down,"
+                " then seed into a new or empty --base-dir."
+            )
 
 
 def _lifecycle_failure(e: SeedError) -> str:
@@ -193,12 +204,12 @@ def _lifecycle_failure(e: SeedError) -> str:
 
 
 def _print_seed_error(e: SeedError, *, docker: bool) -> None:
-    _console.print(Text(format_seed_error(e), style="red"), highlight=False)
+    _err_console.print(Text(format_seed_error(e), style="red"), highlight=False)
     if docker and e.may_leave_containers:
-        _console.print(
+        _err_console.print(
             Text("The demo containers may still be running. To remove them:"),
         )
-        _console.print(Text(_docker_teardown()), highlight=False)
+        _err_console.print(Text(_docker_teardown()), highlight=False)
 
 
 def _print_plan(steps: list[str]) -> None:

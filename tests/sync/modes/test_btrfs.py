@@ -157,6 +157,29 @@ class TestBtrfsSync:
         assert runner.commands_starting_with("btrfs", "subvolume", "snapshot") == []
         assert runner.commands_starting_with("ln") == []
 
+    def test_dry_run_reports_snapshot_not_after_latest(self) -> None:
+        """A dry run must not report success for a run that will be refused."""
+        config = _btrfs_config()
+        _, sync_statuses = active_statuses(config)
+        later = Snapshot.from_name("2026-03-06T14:30:00.001Z")  # the clock + 1ms
+        sync_statuses = {
+            k: v.model_copy(update={"destination_latest_snapshot": later})
+            for k, v in sync_statuses.items()
+        }
+        runner = FakeCommandRunner()
+
+        results = run_syncs(
+            config,
+            sync_statuses,
+            dry_run=True,
+            rsync=FakeRsync(),
+            run_command=runner,
+        )
+
+        assert results[0].failure == SyncFailureKind.SNAPSHOT
+        assert results[0].dry_run is True
+        assert runner.commands == []
+
     def test_auto_prune_after_snapshot(self) -> None:
         config = _btrfs_config(max_snapshots=1)
         _, sync_statuses = active_statuses(config)

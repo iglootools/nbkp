@@ -15,12 +15,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from nbkp.cliwiring.lock import RunLockFn
 from nbkp.cliwiring.runtime import Runtime
 from nbkp.config import Config, SyncConfig, Volume
 from nbkp.credentials import CommandFn, PromptFn
 from nbkp.remote.dispatch import VolumeCommandRunner, WhichFn
 from nbkp.remote.endpoints import ResolvedEndpoint, ResolvedEndpoints
+from nbkp.runlock import RunLockFn
 from nbkp.sync.modes import RsyncRunner
 
 type Response = subprocess.CompletedProcess[str] | Exception
@@ -165,12 +165,32 @@ class UnexpectedCommandError(AssertionError):
     """A fake was asked to run *command*, which the test did not expect."""
 
     def __init__(self, command: list[str]) -> None:
-        super().__init__(f"unexpected credential command: {command}")
+        super().__init__(f"unexpected command: {command}")
         self.command = command
 
 
 def _no_credential_command(command: list[str]) -> subprocess.CompletedProcess[str]:
     raise UnexpectedCommandError(command)
+
+
+def refuse_rsync(
+    sync: SyncConfig,
+    config: Config,  # noqa: ARG001 -- RsyncRunner's signature
+    **kwargs: Any,  # noqa: ANN401, ARG001 -- run_rsync's keywords
+) -> subprocess.CompletedProcess[str]:
+    """Fail the test: an :class:`~nbkp.sync.modes.RsyncRunner` that must not run."""
+    raise UnexpectedCommandError(["rsync", f"<{sync.slug}>"])
+
+
+def refuse_volume_command(
+    cmd: list[str],
+    volume: Volume,  # noqa: ARG001 -- VolumeCommandRunner's signature
+    resolved_endpoints: ResolvedEndpoints,  # noqa: ARG001 -- likewise
+    *,
+    stdin: str | None = None,  # noqa: ARG001 -- likewise
+) -> subprocess.CompletedProcess[str]:
+    """Fail the test on any command: a VolumeCommandRunner that must not run."""
+    raise UnexpectedCommandError(cmd)
 
 
 class UnexpectedPromptError(AssertionError):
@@ -189,7 +209,7 @@ class FakeRunLock:
     """
     A run lock that is always free, recording the path of each lock taken.
 
-    A :data:`~nbkp.cliwiring.lock.RunLockFn`.
+    A :data:`~nbkp.runlock.RunLockFn`.
     """
 
     paths: list[Path] = field(default_factory=list[Path])

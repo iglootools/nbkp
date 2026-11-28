@@ -93,7 +93,14 @@ class TestCreateSnapshot:
         runner = FakeCommandRunner()
 
         expected_ts = create_snapshot_timestamp(_NOW, config.volumes["dst"], "linux")
-        path = create_snapshot(sync, config, now=_NOW, platform="linux", run=runner)
+        path = create_snapshot(
+            sync,
+            config,
+            now=_NOW,
+            platform="linux",
+            run=runner,
+            resolved_endpoints={},
+        )
 
         assert path == f"/mnt/dst/backup/snapshots/{expected_ts.name}"
         assert runner.commands == [
@@ -116,13 +123,27 @@ class TestCreateSnapshot:
             SnapshotOperationError,
             check=lambda e: e.op is SnapshotOp.CREATE,
         ):
-            create_snapshot(sync, config, now=_NOW, platform="linux", run=runner)
+            create_snapshot(
+                sync,
+                config,
+                now=_NOW,
+                platform="linux",
+                run=runner,
+                resolved_endpoints={},
+            )
 
     def test_snapshot_taken_on_the_volume_when_remote(self) -> None:
         config, sync = _remote_config()
         runner = FakeCommandRunner()
 
-        path = create_snapshot(sync, config, now=_NOW, platform="linux", run=runner)
+        path = create_snapshot(
+            sync,
+            config,
+            now=_NOW,
+            platform="linux",
+            run=runner,
+            resolved_endpoints={},
+        )
 
         assert path == "/backup/data/snapshots/2024-01-15T12:00:00.000Z"
         assert runner.commands == [
@@ -142,7 +163,14 @@ class TestCreateSnapshot:
         runner = FakeCommandRunner()
 
         expected_ts = create_snapshot_timestamp(_NOW, config.volumes["dst"], "linux")
-        path = create_snapshot(sync, config, now=_NOW, platform="linux", run=runner)
+        path = create_snapshot(
+            sync,
+            config,
+            now=_NOW,
+            platform="linux",
+            run=runner,
+            resolved_endpoints={},
+        )
 
         assert path == f"/mnt/my dst/my backup/snapshots/{expected_ts.name}"
         assert runner.commands == [
@@ -160,7 +188,14 @@ class TestCreateSnapshot:
         config, sync = _remote_config_spaces()
         runner = FakeCommandRunner()
 
-        path = create_snapshot(sync, config, now=_NOW, platform="linux", run=runner)
+        path = create_snapshot(
+            sync,
+            config,
+            now=_NOW,
+            platform="linux",
+            run=runner,
+            resolved_endpoints={},
+        )
 
         assert path == "/my backup/my data/snapshots/2024-01-15T12:00:00.000Z"
         assert runner.commands == [
@@ -285,7 +320,13 @@ class TestPruneSnapshots:
         config, sync = _remote_config()
         runner = _listing(_THREE)
 
-        deleted = prune_snapshots(sync, config, max_snapshots=1, run=runner)
+        deleted = prune_snapshots(
+            sync,
+            config,
+            max_snapshots=1,
+            run=runner,
+            resolved_endpoints={},
+        )
 
         assert deleted == [
             "/backup/data/snapshots/2024-01-01T00:00:00.000Z",
@@ -297,7 +338,13 @@ class TestPruneSnapshots:
         config, sync = _remote_config()
         runner = _listing(_THREE)
 
-        deleted = prune_snapshots(sync, config, max_snapshots=5, run=runner)
+        deleted = prune_snapshots(
+            sync,
+            config,
+            max_snapshots=5,
+            run=runner,
+            resolved_endpoints={},
+        )
 
         assert deleted == []
         assert runner.commands == [["ls", "/backup/data/snapshots"]]
@@ -312,6 +359,7 @@ class TestPruneSnapshots:
             max_snapshots=1,
             dry_run=True,
             run=runner,
+            resolved_endpoints={},
         )
 
         assert deleted == [
@@ -329,7 +377,13 @@ class TestPruneSnapshots:
         config, sync = _remote_config()
         runner = _listing(_THREE, latest="2024-01-02T00:00:00.000Z")
 
-        deleted = prune_snapshots(sync, config, max_snapshots=1, run=runner)
+        deleted = prune_snapshots(
+            sync,
+            config,
+            max_snapshots=1,
+            run=runner,
+            resolved_endpoints={},
+        )
 
         # Counted: 20240101 and 20240102 (latest), so excess=1.
         assert deleted == ["/backup/data/snapshots/2024-01-01T00:00:00.000Z"]
@@ -340,7 +394,13 @@ class TestPruneSnapshots:
         config, sync = _remote_config()
         runner = _listing(_THREE, latest="2024-01-02T00:00:00.000Z")
 
-        deleted = prune_snapshots(sync, config, max_snapshots=2, run=runner)
+        deleted = prune_snapshots(
+            sync,
+            config,
+            max_snapshots=2,
+            run=runner,
+            resolved_endpoints={},
+        )
 
         assert deleted == []
         assert _deleted(runner) == []

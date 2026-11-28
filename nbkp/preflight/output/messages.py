@@ -31,6 +31,9 @@ from nbkp.preflight.status import (
 _VOLUME: dict[VolumeErrorKind, str] = {
     VolumeErrorKind.VOLUME_NOT_MOUNTED: "volume not mounted",
     VolumeErrorKind.SENTINEL_NOT_FOUND: f"{VOLUME_SENTINEL} volume sentinel not found",
+    VolumeErrorKind.SENTINEL_UNREADABLE: (
+        f"cannot tell whether the {VOLUME_SENTINEL} volume sentinel exists"
+    ),
     VolumeErrorKind.DEVICE_NOT_PRESENT: "device not plugged in",
     VolumeErrorKind.UNLOCK_FAILED: "failed to unlock luks encrypted device",
     VolumeErrorKind.MOUNT_FAILED: "failed to mount volume",
@@ -85,6 +88,9 @@ _SYNC: dict[SyncErrorKind, str] = {
 
 _SOURCE_ENDPOINT: dict[SourceEndpointErrorKind, str] = {
     SourceEndpointErrorKind.SENTINEL_NOT_FOUND: f"{SOURCE_SENTINEL} sentinel not found",
+    SourceEndpointErrorKind.SENTINEL_UNREADABLE: (
+        f"cannot tell whether the {SOURCE_SENTINEL} sentinel exists"
+    ),
     SourceEndpointErrorKind.SNAPSHOTS_DIR_NOT_FOUND: (
         f"{SNAPSHOTS_DIR}/ directory not found"
     ),
@@ -94,12 +100,18 @@ _SOURCE_ENDPOINT: dict[SourceEndpointErrorKind, str] = {
     SourceEndpointErrorKind.LATEST_SYMLINK_INVALID: (
         f"{LATEST_LINK} symlink target is invalid"
     ),
+    SourceEndpointErrorKind.LATEST_SYMLINK_UNREADABLE: (
+        f"{LATEST_LINK} symlink exists but cannot be read"
+    ),
     SourceEndpointErrorKind.VOLUME_INACTIVE: "volume inactive",
 }
 
 _DESTINATION_ENDPOINT: dict[DestinationEndpointErrorKind, str] = {
     DestinationEndpointErrorKind.SENTINEL_NOT_FOUND: (
         f"{DESTINATION_SENTINEL} sentinel not found"
+    ),
+    DestinationEndpointErrorKind.SENTINEL_UNREADABLE: (
+        f"cannot tell whether the {DESTINATION_SENTINEL} sentinel exists"
     ),
     DestinationEndpointErrorKind.NOT_WRITABLE: "endpoint directory not writable",
     DestinationEndpointErrorKind.SNAPSHOTS_DIR_NOT_FOUND: (
@@ -113,6 +125,9 @@ _DESTINATION_ENDPOINT: dict[DestinationEndpointErrorKind, str] = {
     ),
     DestinationEndpointErrorKind.LATEST_SYMLINK_INVALID: (
         f"{LATEST_LINK} symlink target is invalid"
+    ),
+    DestinationEndpointErrorKind.LATEST_SYMLINK_UNREADABLE: (
+        f"{LATEST_LINK} symlink exists but cannot be read"
     ),
     DestinationEndpointErrorKind.STAGING_SUBVOL_NOT_FOUND: (
         f"{STAGING_DIR}/ directory not found"

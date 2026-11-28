@@ -1,23 +1,24 @@
 """Mount and umount drives around a command, under the run lock, with progress."""
 
-from collections.abc import Callable, Generator
+from collections.abc import Generator
 from contextlib import contextmanager
 
 import typer
 from rich.console import Console, Group, RenderableType
 from rich.text import Text
 
-from nbkp.cliwiring.lock import is_run_lock_needed, run_lock_or_exit
+from nbkp.cliwiring.lock import run_lock_or_exit
 from nbkp.cliwiring.mount_progress import LifecycleProgress, mount_display_names
 from nbkp.cliwiring.output_format import OutputFormat
 from nbkp.cliwiring.runtime import Runtime
 from nbkp.config import Config
-from nbkp.credentials import build_passphrase_fn
+from nbkp.credentials import PassphraseFn, build_passphrase_fn
 from nbkp.disks import (
     MountObservation,
     UmountResult,
     any_failed,
-    managed_mount as _disks_managed_mount,
+    managed_mount,
+    managed_volumes,
 )
 from nbkp.disks.output import (
     build_mount_status_table,
@@ -26,6 +27,7 @@ from nbkp.disks.output import (
 )
 from nbkp.policy import Strictness
 from nbkp.remote.endpoints import ResolvedEndpoints
+from nbkp.runlock import is_run_lock_needed
 
 
 def _format_mount_status(
@@ -52,7 +54,7 @@ def lifecycle_session(
     names: list[str] | None = None,
     strictness: Strictness = Strictness.IGNORE_INACTIVE,
     umounting: bool = True,
-) -> Generator[tuple[Callable[[str], str], LifecycleProgress]]:
+) -> Generator[tuple[PassphraseFn, LifecycleProgress]]:
     """
     Yield the passphrase function and progress bars for a mount lifecycle.
 
@@ -88,7 +90,7 @@ def lifecycle_session(
 
 
 @contextmanager
-def managed_mount(
+def managed_mount_or_exit(
     cfg: Config,
     resolved: ResolvedEndpoints,
     *,
@@ -123,8 +125,9 @@ def managed_mount(
     writes:
         Whether the block modifies a destination (a sync, a prune).  The run
         lock is held from before the first mount to after the last umount
-        when the block writes, mounts or umounts; when another command holds
-        it, the command exits 1 before mounting anything.
+        when the block writes, or mounts a drive (*mount* is on and a
+        mount-managed volume is in scope); when another command holds it,
+        the command exits 1 before mounting anything.
     mount:
         When ``False`` (or no volumes have mount config), mounting and
         umounting are both skipped.
@@ -151,7 +154,14 @@ def managed_mount(
         runtime.run_lock,
         runtime.run_lock_path(),
         output_format,
-        needed=is_run_lock_needed(writes=writes, mount=mount, umount=umount),
+        needed=is_run_lock_needed(
+            writes=writes,
+            # As the core lifecycle does: without --mount nothing is umounted
+            # either, and with no mount-managed volume in scope nothing is
+            # mounted.
+            mounts_drives=mount and bool(managed_volumes(cfg, resolved)),
+        ),
+        only_mounting=not writes,
     ):
         yield from _managed_mount_reporting_umount_failures(
             cfg,
@@ -223,7 +233,7 @@ def _managed_mount_with_progress(
             collected.append(result)
             progress.on_umount_end(slug, result)
 
-        with _disks_managed_mount(
+        with managed_mount(
             cfg,
             resolved,
             passphrase_fn,

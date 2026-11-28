@@ -83,6 +83,7 @@ def _do_sync(
         config,
         now=now or datetime.now(UTC),
         platform=sys.platform,
+        resolved_endpoints={},
     )
     snapshot = Snapshot.from_path(snapshot_path)
 
@@ -90,10 +91,11 @@ def _do_sync(
         sync,
         config,
         dest_suffix=f"snapshots/{snapshot.name}",
+        resolved_endpoints={},
     )
     assert result.returncode == 0
 
-    update_latest_symlink(sync, config, snapshot)
+    update_latest_symlink(sync, config, snapshot, resolved_endpoints={})
     return sync, config, snapshot.name
 
 
@@ -111,6 +113,7 @@ class TestCreateSnapshotDir:
             config,
             now=datetime.now(UTC),
             platform=sys.platform,
+            resolved_endpoints={},
         )
 
         assert Path(snapshot_path).is_dir()
@@ -128,6 +131,7 @@ class TestCreateSnapshotDir:
             config,
             now=datetime.now(UTC),
             platform=sys.platform,
+            resolved_endpoints={},
         )
 
         snapshots_dir = Path(snapshot_path).parent
@@ -145,7 +149,13 @@ class TestCreateSnapshotDir:
         sync, config, name = _do_sync(src, dst, now=now)
 
         with pytest.raises(SnapshotOperationError) as exc:
-            create_snapshot_dir(sync, config, now=now, platform=sys.platform)
+            create_snapshot_dir(
+                sync,
+                config,
+                now=now,
+                platform=sys.platform,
+                resolved_endpoints={},
+            )
 
         assert exc.value.op is SnapshotOp.MKDIR
         assert (dst / "snapshots" / name / "data.txt").read_text() == "first"
@@ -171,7 +181,7 @@ class TestCleanupOrphanedSnapshots:
         orphan = Path(str(dst)) / "snapshots" / orphan_snapshot.name
         orphan.mkdir(parents=True)
 
-        deleted = cleanup_orphaned_snapshots(sync, config)
+        deleted = cleanup_orphaned_snapshots(sync, config, resolved_endpoints={})
         assert len(deleted) == 1
         assert orphan_snapshot.name in deleted[0]
         assert not orphan.exists()
@@ -185,7 +195,7 @@ class TestCleanupOrphanedSnapshots:
 
         sync, config, snap_name = _do_sync(src, dst)
 
-        cleanup_orphaned_snapshots(sync, config)
+        cleanup_orphaned_snapshots(sync, config, resolved_endpoints={})
         snap_dir = Path(str(dst)) / "snapshots" / snap_name
         assert snap_dir.exists()
 
@@ -198,7 +208,7 @@ class TestCleanupOrphanedSnapshots:
 
         sync, config = _make_config(str(src), str(dst))
 
-        deleted = cleanup_orphaned_snapshots(sync, config)
+        deleted = cleanup_orphaned_snapshots(sync, config, resolved_endpoints={})
         assert deleted == []
 
 
@@ -259,10 +269,10 @@ class TestPruneSnapshots:
 
         sync, config, names = self._create_snapshots(src, dst, 5, max_snapshots=3)
 
-        deleted = prune_snapshots(sync, config, 3)
+        deleted = prune_snapshots(sync, config, 3, resolved_endpoints={})
         assert len(deleted) == 2
 
-        remaining = list_snapshots(sync, config)
+        remaining = list_snapshots(sync, config, resolved_endpoints={})
         assert len(remaining) == 3
         for snap in remaining:
             assert snap.name not in [names[0], names[1]]
@@ -277,10 +287,10 @@ class TestPruneSnapshots:
         sync, config, names = self._create_snapshots(src, dst, 3)
 
         # Prune to 0 — latest should still be kept
-        deleted = prune_snapshots(sync, config, 0)
+        deleted = prune_snapshots(sync, config, 0, resolved_endpoints={})
         assert len(deleted) == 2
 
-        remaining = list_snapshots(sync, config)
+        remaining = list_snapshots(sync, config, resolved_endpoints={})
         assert len(remaining) == 1
         assert names[-1] == remaining[0].name
 
@@ -293,10 +303,10 @@ class TestPruneSnapshots:
 
         sync, config, _names = self._create_snapshots(src, dst, 4)
 
-        deleted = prune_snapshots(sync, config, 2, dry_run=True)
+        deleted = prune_snapshots(sync, config, 2, dry_run=True, resolved_endpoints={})
         assert len(deleted) == 2
 
-        remaining = list_snapshots(sync, config)
+        remaining = list_snapshots(sync, config, resolved_endpoints={})
         assert len(remaining) == 4
 
     def test_noop_under_limit(self, tmp_path: Path) -> None:
@@ -308,10 +318,10 @@ class TestPruneSnapshots:
 
         sync, config, _names = self._create_snapshots(src, dst, 2)
 
-        deleted = prune_snapshots(sync, config, 10)
+        deleted = prune_snapshots(sync, config, 10, resolved_endpoints={})
         assert deleted == []
 
-        remaining = list_snapshots(sync, config)
+        remaining = list_snapshots(sync, config, resolved_endpoints={})
         assert len(remaining) == 2
 
 
@@ -338,7 +348,7 @@ class TestNonSnapshotEntries:
     def test_prune_keeps_them(self, tmp_path: Path) -> None:
         sync, config, names, snapshots = self._setup(tmp_path)
 
-        deleted = prune_snapshots(sync, config, 2)
+        deleted = prune_snapshots(sync, config, 2, resolved_endpoints={})
 
         assert [Path(p).name for p in deleted] == [names[0]]
         for name in self._LOOKALIKES:
@@ -347,7 +357,7 @@ class TestNonSnapshotEntries:
     def test_orphan_cleanup_keeps_them(self, tmp_path: Path) -> None:
         sync, config, _names, snapshots = self._setup(tmp_path)
 
-        assert cleanup_orphaned_snapshots(sync, config) == []
+        assert cleanup_orphaned_snapshots(sync, config, resolved_endpoints={}) == []
         for name in self._LOOKALIKES:
             assert (snapshots / name).is_dir()
 
@@ -369,26 +379,40 @@ class TestHardLinkIncremental:
         sync, config = _make_config(str(src), str(dst))
 
         now1 = datetime(2024, 1, 1, tzinfo=UTC)
-        snap1_path = create_snapshot_dir(sync, config, now=now1, platform=sys.platform)
+        snap1_path = create_snapshot_dir(
+            sync,
+            config,
+            now=now1,
+            platform=sys.platform,
+            resolved_endpoints={},
+        )
         snap1 = Snapshot.from_path(snap1_path)
         result = run_rsync(
             sync,
             config,
             dest_suffix=f"snapshots/{snap1.name}",
+            resolved_endpoints={},
         )
         assert result.returncode == 0
-        update_latest_symlink(sync, config, snap1)
+        update_latest_symlink(sync, config, snap1, resolved_endpoints={})
 
         (src / "changed.txt").write_text("v2 is different")
 
         now2 = datetime(2024, 1, 2, tzinfo=UTC)
-        snap2_path = create_snapshot_dir(sync, config, now=now2, platform=sys.platform)
+        snap2_path = create_snapshot_dir(
+            sync,
+            config,
+            now=now2,
+            platform=sys.platform,
+            resolved_endpoints={},
+        )
         snap2 = Snapshot.from_path(snap2_path)
         result = run_rsync(
             sync,
             config,
             link_dest=f"../{snap1.name}",
             dest_suffix=f"snapshots/{snap2.name}",
+            resolved_endpoints={},
         )
         assert result.returncode == 0
 

@@ -45,7 +45,7 @@ def passphrase_env_var(passphrase_id: str) -> str:
 
 # Key pairs where setting one half in a child endpoint must drop the other
 # half inherited from its parent, so the merge does not trip the exclusivity
-# validators.
+# validators. Keys are compared in kebab-case (see ``_kebab_keys``).
 _EXCLUSIVE_KEY_GROUPS: tuple[frozenset[str], ...] = (
     frozenset({"proxy-jump", "proxy-jumps"}),
     frozenset({"location", "locations"}),
@@ -64,12 +64,24 @@ def _stale_exclusive_keys(child: Mapping[str, Any]) -> set[str]:
 
 # Nested sections a child overlays key by key rather than replacing, so that
 # setting ``compress`` does not drop the parent's known-hosts file or timeouts.
-_MERGED_SECTIONS = frozenset({"connection-options", "connection_options"})
+_MERGED_SECTIONS = frozenset({"connection-options"})
+
+
+def _kebab_keys(raw: Mapping[str, Any]) -> dict[str, Any]:
+    """
+    Spell every key of a raw mapping in kebab-case.
+
+    ``ConfigModel`` accepts the Python field names (``proxy_jumps``) as well
+    as the kebab-case keys, so a parent and a child may spell the same field
+    differently: merging must see them as one key, or both survive and trip
+    the exclusivity validators.
+    """
+    return {k.replace("_", "-"): v for k, v in raw.items()}
 
 
 def _overlay_field(key: str, parent_value: object, child_value: object) -> object:
     return (
-        {**parent_value, **child_value}
+        {**_kebab_keys(parent_value), **_kebab_keys(child_value)}
         if key in _MERGED_SECTIONS
         and is_raw_mapping(parent_value)
         and is_raw_mapping(child_value)
@@ -91,12 +103,17 @@ def _merge_endpoint(
     The child keeps its own ``extends`` (the parent's is not inherited), so
     the merged endpoint still records which endpoint it was built from. The
     parent's ``slug`` is not inherited either: it names the parent, and the
-    child takes its slug from its own key.
+    child takes its slug from its own key. Keys come out in kebab-case.
     """
-    stale = _stale_exclusive_keys(child)
+    parent_fields = _kebab_keys(parent)
+    child_fields = _kebab_keys(child)
+    stale = _stale_exclusive_keys(child_fields)
     merged = {
-        **{k: v for k, v in parent.items() if k not in _NOT_INHERITED},
-        **{k: _overlay_field(k, parent.get(k), v) for k, v in child.items()},
+        **{k: v for k, v in parent_fields.items() if k not in _NOT_INHERITED},
+        **{
+            k: _overlay_field(k, parent_fields.get(k), v)
+            for k, v in child_fields.items()
+        },
     }
     return {k: v for k, v in merged.items() if k not in stale}
 
@@ -135,7 +152,7 @@ def _resolve_endpoint(
 def _inject_slug(slug: str, data: object) -> object:
     match data:
         case {"slug": object() as declared} if declared != slug:
-            # Sync endpoints and ``--name`` look entries up by key, endpoint
+            # Sync endpoints and ``--volume`` look entries up by key, endpoint
             # resolution and mount results by ``slug``: if they differed,
             # commands for one volume could reach another volume's host.
             raise config_error(
@@ -229,7 +246,8 @@ class Config(ConfigModel):
         default=None,
         description=(
             "Command template for the ``command`` credential provider."
-            " ``{id}`` is replaced with the passphrase-id."
+            " ``{id}`` is replaced with the passphrase-id, and a leading ``~`` in"
+            " the program (the first item) is expanded."
             ' Example: ``["pass", "show", "nbkp/{id}"]``.'
         ),
     )

@@ -1,5 +1,7 @@
 """Tests for nbkp.sync.orchestration: ordering, skipping, cancellation, strictness."""
 
+import pytest
+
 from nbkp.config import (
     BtrfsSnapshotConfig,
     Config,
@@ -16,7 +18,12 @@ from nbkp.preflight import (
     SyncStatus,
 )
 from nbkp.sync.results import SyncFailureKind, SyncOutcome, SyncWarningKind
-from tests.fakes import FakeCommandRunner, FakeRsync, completed
+from tests.fakes import (
+    FakeCommandRunner,
+    FakeRsync,
+    UnexpectedCommandError,
+    completed,
+)
 from tests.sync.runner_helpers import (
     NEW_SNAPSHOT_NAME,
     active_statuses,
@@ -37,6 +44,14 @@ class TestRunAllSyncs:
         assert len(results) == 1
         assert results[0].success is True
         assert results[0].rsync_exit_code == 0
+
+    def test_attempted_sync_without_fakes_fails_the_test(self) -> None:
+        """run_syncs never falls back to the real rsync: a stray sync must fail."""
+        config = make_local_config()
+        _, sync_statuses = active_statuses(config)
+
+        with pytest.raises(UnexpectedCommandError):
+            run_syncs(config, sync_statuses)
 
     def test_inactive_sync(self) -> None:
         config = make_local_config()

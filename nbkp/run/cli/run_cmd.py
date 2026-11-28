@@ -6,9 +6,7 @@ from types import TracebackType
 from typing import Annotated, Self
 
 import typer
-from rich.console import Console, Group, RenderableType
-from rich.padding import Padding
-from rich.panel import Panel
+from rich.console import Console
 from rich.status import Status
 from rich.text import Text
 
@@ -18,7 +16,7 @@ from nbkp.cliwiring.config import (
     resolve_endpoints,
 )
 from nbkp.cliwiring.invocation import Invocation
-from nbkp.cliwiring.mount import format_umount_failures, managed_mount
+from nbkp.cliwiring.mount import format_umount_failures, managed_mount_or_exit
 from nbkp.cliwiring.mount_progress import mount_display_names
 from nbkp.cliwiring.options import (
     CONFIG_OPTION,
@@ -37,32 +35,23 @@ from nbkp.cliwiring.progress import StepProgressBar
 from nbkp.cliwiring.runtime import runtime_of
 from nbkp.config import Config
 from nbkp.disks import UmountResult
-from nbkp.disks.output import umount_result_json
-from nbkp.ordering.output import build_rich_tree_sections
 from nbkp.policy import Strictness
 from nbkp.preflight import (
     PreflightErrorKind,
     PreflightResult,
     check_step_count,
 )
-from nbkp.preflight.output import format_human_check, format_problems
+from nbkp.preflight.output import format_human_check
 from nbkp.remote.endpoints import ResolvedEndpoints
+from nbkp.run.output import abort_message, build_results_panel, run_json
 from nbkp.run.pipeline import (
     PipelineResult,
     SyncCallbacks,
     check_and_run,
-    fatal_sync_errors,
     run_failed,
 )
 from nbkp.sync import ProgressMode, RunOptions, SyncResult, result_severity
-from nbkp.sync.output import (
-    build_human_results_sections,
-    build_run_preview_sections,
-    sync_result_json,
-)
 from nbkp.theme import severity_style, severity_symbol
-
-_ABORT_DETAIL_INDENT = 2
 
 
 def run_cmd(
@@ -114,14 +103,30 @@ def run_cmd(
     runtime = runtime_of(ctx)
     cfg = load_config_or_exit(runtime, config, output)
     require_known_syncs(cfg, sync, output)
-    resolved = resolve_endpoints(cfg, location, exclude_location, network, output)
-    invocation = Invocation.of(config, location, exclude_location, network)
-    hint = _troubleshoot_hint(invocation, strictness, mount=mount)
+    resolved = resolve_endpoints(
+        cfg,
+        location,
+        exclude_location,
+        network,
+        output,
+        ssh_config_path=runtime.ssh_config_path(),
+    )
+    invocation = Invocation.of(
+        config,
+        location,
+        exclude_location,
+        network,
+        strictness=strictness,
+        mount=mount,
+    )
+    # It cannot narrow to the run's --sync selection, which troubleshoot
+    # does not take.
+    hint = invocation.troubleshoot_command()
     # Filled when the volumes are unmounted, so the outcome is printed after
     # the block: a drive left mounted or unlocked is part of the outcome.
     umount_results: list[UmountResult] = []
     with (
-        managed_mount(
+        managed_mount_or_exit(
             cfg,
             resolved,
             runtime=runtime,
@@ -181,31 +186,6 @@ def run_cmd(
     )
     if run_failed(pipeline, umount_results):
         raise typer.Exit(1)
-
-
-def _troubleshoot_hint(
-    invocation: Invocation,
-    strictness: Strictness,
-    *,
-    mount: bool,
-) -> str:
-    """
-    Build the ``preflight troubleshoot`` command that explains an aborted run.
-
-    It judges problems at the run's strictness, and leaves the drives alone when the
-    run did. It cannot narrow to the run's ``--sync`` selection, which ``troubleshoot``
-    does not take.
-    """
-    return invocation.command(
-        "preflight",
-        "troubleshoot",
-        *(
-            ["-S", strictness.value]
-            if strictness is not Strictness.IGNORE_INACTIVE
-            else []
-        ),
-        *([] if mount else ["--no-mount"]),
-    )
 
 
 class _HumanProgress:
@@ -338,103 +318,15 @@ def _print_outcome(
             Console(stderr=True).print(abort_message(pipeline, strictness, hint))
         case (OutputFormat.HUMAN, False):
             Console().print(
-                _results_panel(pipeline, cfg, resolved, strictness, dry_run=dry_run),
+                build_results_panel(
+                    pipeline,
+                    cfg,
+                    resolved,
+                    strictness,
+                    dry_run=dry_run,
+                ),
             )
     if output is OutputFormat.HUMAN:
         Console(stderr=True).print(
             format_umount_failures(umount_results, mount_display_names(cfg)),
         )
-
-
-def run_json(
-    pipeline: PipelineResult,
-    hint: str | None,
-    umount_results: list[UmountResult],
-    *,
-    dry_run: bool,
-) -> dict[str, object]:
-    """
-    Build ``run -o json``.
-
-    ``"dry_run": true`` for a dry run, the preflight statuses, the sync results, the
-    umount outcome of each mount-managed volume, and, when preflight aborted the run,
-    the troubleshoot command (*hint*).
-    """
-    return {
-        **({"dry_run": True} if dry_run else {}),
-        "volumes": list(pipeline.preflight.volume_statuses.values()),
-        "syncs": list(pipeline.preflight.sync_statuses.values()),
-        "results": [sync_result_json(r) for r in pipeline.results],
-        "umount": [
-            {"volume": r.volume_slug, "success": r.success, **umount_result_json(r)}
-            for r in umount_results
-        ],
-        **({"hint": hint} if hint is not None else {}),
-    }
-
-
-def abort_message(
-    pipeline: PipelineResult,
-    strictness: Strictness,
-    hint: str,
-) -> RenderableType:
-    """
-    Explain why preflight aborted the run.
-
-    Each sync whose errors are fatal under *strictness*, and the troubleshoot command
-    (*hint*) that explains them.
-    """
-    errored = fatal_sync_errors(pipeline.preflight.sync_statuses, strictness)
-    plural = "s" if len(errored) != 1 else ""
-    # Text, not markup: slugs and error values are not nbkp-authored markup.
-    return Group(
-        Text(""),
-        Text.assemble(
-            ("Aborting:", "bold red"),
-            f" preflight checks found errors in {len(errored)} sync{plural}:",
-        ),
-        *(
-            Padding(
-                Text(f"{slug}: {format_problems(errors)}"),
-                (0, 0, 0, _ABORT_DETAIL_INDENT),
-            )
-            for slug, errors in errored.items()
-        ),
-        Text.assemble("Run ", (hint, "bold"), " for step-by-step fixes."),
-    )
-
-
-def _results_panel(
-    pipeline: PipelineResult,
-    cfg: Config,
-    resolved: ResolvedEndpoints,
-    strictness: Strictness,
-    *,
-    dry_run: bool,
-) -> RenderableType:
-    sync_severities = {
-        r.sync_slug: result_severity(r, strictness) for r in pipeline.results
-    }
-    sections = [
-        *build_rich_tree_sections(cfg, sync_severities),
-        # The commands a real run would execute. The script sh generates has no
-        # such preview: the script is itself the list of commands it runs.
-        *(
-            build_run_preview_sections(pipeline.preflight.sync_statuses, cfg, resolved)
-            if dry_run
-            else []
-        ),
-        Text(""),
-        *build_human_results_sections(
-            pipeline.results,
-            dry_run=dry_run,
-            config=cfg,
-            resolved_endpoints=resolved,
-        ),
-    ]
-    return Panel(
-        Group(*sections),
-        title="[bold]Sync Results[/bold]",
-        border_style="cyan",
-        padding=(0, 1),
-    )

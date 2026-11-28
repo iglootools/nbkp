@@ -600,6 +600,42 @@ class TestUmountVolume:
         # Locking a mounted container cannot succeed: it is not attempted.
         assert _udisks_steps(run) == ["unmount"]
 
+    @pytest.mark.parametrize(
+        ("step", "stderr", "reason"),
+        [
+            (
+                "unmount",
+                "Error unmounting: Not authorized to perform operation",
+                UmountFailureKind.NOT_AUTHORIZED,
+            ),
+            (
+                "lock",
+                "Error locking: Not authorized to perform operation",
+                UmountFailureKind.NOT_AUTHORIZED,
+            ),
+            (
+                "unmount",
+                "bash: udisksctl: command not found",
+                UmountFailureKind.UDISKS_NOT_AVAILABLE,
+            ),
+        ],
+    )
+    def test_unmount_and_lock_refusals_are_classified_as_for_mount(
+        self,
+        step: str,
+        stderr: str,
+        reason: UmountFailureKind,
+    ) -> None:
+        run = (
+            FakeCommandRunner()
+            .on("lsblk", returns=_UNLOCKED)
+            .on("findmnt", returns=_mounted_at("/mnt/encrypted"))
+            .on("udisksctl", step, returns=completed(1, stderr=stderr))
+        )
+        result = _umount(_encrypted_vol(), run)
+        assert not result.success
+        assert result.failure_reason == reason
+
     def test_ssh_timeout_returns_failed(self) -> None:
         run = FakeCommandRunner().on("lsblk", returns=TimeoutError("timed out"))
         result = _umount(_encrypted_vol(), run)

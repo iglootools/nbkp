@@ -59,7 +59,7 @@ class TestLocalToLocal:
         (src / "file2.txt").write_text("world")
 
         sync, config = _make_local_config(str(src), str(dst))
-        result = run_rsync(sync, config)
+        result = run_rsync(sync, config, resolved_endpoints={})
 
         assert result.returncode == 0
         assert (dst / "file1.txt").read_text() == "hello"
@@ -74,12 +74,12 @@ class TestLocalToLocal:
         (src / "file1.txt").write_text("version-one")
 
         sync, config = _make_local_config(str(src), str(dst))
-        run_rsync(sync, config)
+        run_rsync(sync, config, resolved_endpoints={})
         assert (dst / "file1.txt").read_text() == "version-one"
 
         # A different size, so rsync's size+mtime quick check sees the change.
         (src / "file1.txt").write_text("version-two-updated")
-        result = run_rsync(sync, config)
+        result = run_rsync(sync, config, resolved_endpoints={})
 
         assert result.returncode == 0
         assert (dst / "file1.txt").read_text() == "version-two-updated"
@@ -94,12 +94,12 @@ class TestLocalToLocal:
         (src / "remove.txt").write_text("remove")
 
         sync, config = _make_local_config(str(src), str(dst))
-        run_rsync(sync, config)
+        run_rsync(sync, config, resolved_endpoints={})
         assert (dst / "remove.txt").exists()
 
         # Propagates only because the rsync args include --delete.
         (src / "remove.txt").unlink()
-        result = run_rsync(sync, config)
+        result = run_rsync(sync, config, resolved_endpoints={})
 
         assert result.returncode == 0
         assert (dst / "keep.txt").exists()
@@ -114,7 +114,7 @@ class TestLocalToLocal:
         (src / "file.txt").write_text("data")
 
         sync, config = _make_local_config(str(src), str(dst))
-        result = run_rsync(sync, config, dry_run=True)
+        result = run_rsync(sync, config, dry_run=True, resolved_endpoints={})
 
         assert result.returncode == 0
         assert not (dst / "file.txt").exists()
@@ -147,7 +147,7 @@ class TestLocalToLocal:
             },
             syncs={"test-sync": sync},
         )
-        result = run_rsync(sync, config)
+        result = run_rsync(sync, config, resolved_endpoints={})
 
         assert result.returncode == 0
         assert (dst / "keep.txt").read_text() == "keep"
@@ -167,7 +167,7 @@ class TestLocalToLocal:
             src_subdir="photos",
             dst_subdir="photos-backup",
         )
-        result = run_rsync(sync, config)
+        result = run_rsync(sync, config, resolved_endpoints={})
 
         assert result.returncode == 0
         assert (dst / "img.jpg").read_text() == "jpeg-data"

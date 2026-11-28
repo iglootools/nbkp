@@ -7,8 +7,10 @@ from io import StringIO
 from rich.console import Console, RenderableType
 
 from nbkp.config import (
+    BtrfsSnapshotConfig,
     Config,
     HardLinkSnapshotConfig,
+    LocalVolume,
 )
 from nbkp.preflight import (
     SyncErrorKind,
@@ -71,8 +73,24 @@ class TestRunPreviewRsyncCommandDisplay:
         sections = build_run_preview_sections(sync_s, config, resolved_endpoints={})
         output = _render_sections(sections)
         # As create_snapshot_dir runs it: an existing snapshot fails the run.
-        assert "mkdir /mnt/dst/snapshots/<timestamp>" in output
+        assert "mkdir '/mnt/dst/snapshots/<timestamp>'" in output
         assert "mkdir -p" not in output
+
+    def test_snapshot_commands_quote_a_path_with_a_space(self) -> None:
+        """Each path copies as one word, as in the run's argument list."""
+        _, config = two_volume_config(
+            dst=LocalVolume(slug="dst", path="/mnt/back ups"),
+            dst_btrfs=BtrfsSnapshotConfig(enabled=True, max_snapshots=3),
+        )
+        vol_s = local_vol_statuses(config)
+        sync_s = {"s1": sync_status(config, vol_s, "s1")}
+        sections = build_run_preview_sections(sync_s, config, resolved_endpoints={})
+        output = _render_sections(sections)
+        assert (
+            "btrfs subvolume snapshot -r '/mnt/back ups/staging'"
+            " '/mnt/back ups/snapshots/<timestamp>'"
+        ) in output
+        assert "ln -sfn 'snapshots/<timestamp>' '/mnt/back ups/latest'" in output
 
     def test_hard_link_shows_link_dest_when_previous_exists(self) -> None:
         _, config = two_volume_config(

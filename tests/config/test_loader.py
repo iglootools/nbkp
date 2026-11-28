@@ -144,6 +144,35 @@ class TestFindConfigFile:
             tmp_path / "home" / ".config" / "nbkp" / "config.yaml"
         )
 
+    @pytest.mark.skipif(os.geteuid() == 0, reason="root traverses any directory")
+    def test_untraversable_explicit_path_is_unreadable(self, tmp_path: Path) -> None:
+        cfg = _place_config(tmp_path / "locked")
+        cfg.parent.chmod(0)
+        try:
+            with pytest.raises(ConfigError) as excinfo:
+                find_config_file(cfg)
+        finally:
+            cfg.parent.chmod(0o700)
+        assert excinfo.value.kind == ConfigErrorKind.UNREADABLE
+        assert excinfo.value.path == cfg
+
+    @pytest.mark.skipif(os.geteuid() == 0, reason="root traverses any directory")
+    def test_untraversable_candidate_stops_search(self, tmp_path: Path) -> None:
+        xdg = tmp_path / "xdg"
+        cfg = _place_config(xdg / "nbkp")
+        _place_config(tmp_path / "site-config" / "nbkp")
+        cfg.parent.chmod(0)
+        try:
+            with pytest.raises(ConfigError) as excinfo:
+                find_config_file(
+                    environ={"XDG_CONFIG_HOME": str(xdg)},
+                    **_search_in(tmp_path),
+                )
+        finally:
+            cfg.parent.chmod(0o700)
+        assert excinfo.value.kind == ConfigErrorKind.UNREADABLE
+        assert excinfo.value.path == cfg
+
 
 class TestLoadConfig:
     def test_full_config(self, sample_config: Config, sample_config_file: Path) -> None:
@@ -180,6 +209,43 @@ class TestLoadConfig:
         with pytest.raises(ConfigError) as excinfo:
             load_config(str(p))
         assert excinfo.value.kind == ConfigErrorKind.UNREADABLE
+
+    def test_duplicate_sync_key_is_invalid_yaml(self, tmp_path: Path) -> None:
+        p = tmp_path / "config.yaml"
+        p.write_text(
+            dedent("""\
+                syncs:
+                  photos: {source: a, destination: b}
+                  photos: {source: a, destination: c}
+            """),
+        )
+        with pytest.raises(ConfigError) as excinfo:
+            load_config(str(p))
+        assert excinfo.value.kind == ConfigErrorKind.INVALID_YAML
+        assert "duplicate key 'photos'" in str(excinfo.value.detail)
+        assert "line 3" in str(excinfo.value.detail)
+
+    def test_duplicate_top_level_section_is_invalid_yaml(self, tmp_path: Path) -> None:
+        p = tmp_path / "config.yaml"
+        p.write_text("syncs: {}\nsyncs: {}\n")
+        with pytest.raises(ConfigError) as excinfo:
+            load_config(str(p))
+        assert excinfo.value.kind == ConfigErrorKind.INVALID_YAML
+        assert "duplicate key 'syncs'" in str(excinfo.value.detail)
+
+    def test_merge_key_may_be_overridden(self, tmp_path: Path) -> None:
+        p = tmp_path / "config.yaml"
+        p.write_text(
+            dedent("""\
+                volumes:
+                  a: &vol {type: local, path: /a}
+                  b:
+                    <<: *vol
+                    path: /b
+            """),
+        )
+        cfg = load_config(str(p))
+        assert cfg.volumes["b"].path == "/b"
 
     def test_not_a_mapping(self, tmp_path: Path) -> None:
         p = tmp_path / "list.yaml"
@@ -420,6 +486,34 @@ class TestLoadConfig:
             "dir-merge .rsync-filter",
             "- .rsync-filter",
         ]
+
+    @pytest.mark.parametrize(
+        "opts",
+        [
+            {"path": None},
+            {"path": ""},
+            {"path": 3},
+            {"path": ".rsync-filter", "exclude-self": "false"},
+            {"exclude-self": True},
+        ],
+    )
+    def test_filter_dir_merge_ill_typed_options_rejected(
+        self,
+        opts: dict[str, object],
+    ) -> None:
+        """A bad option must fail validation, not become a bogus rsync rule."""
+        with pytest.raises(ValidationError) as excinfo:
+            SyncConfig.model_validate(
+                {
+                    "slug": "s",
+                    "source": "a",
+                    "destination": "b",
+                    "filters": [{"dir-merge": opts}],
+                },
+            )
+        assert {err["type"] for err in excinfo.value.errors()} == {
+            ConfigValidationErrorKind.INVALID_FILTER,
+        }
 
     def test_rsync_options_override(self, tmp_path: Path) -> None:
         config = Config(
@@ -773,6 +867,36 @@ class TestLoadConfig:
         assert len(chain) == 2
         assert chain[0].host == "bastion2.example.com"
         assert chain[1].host == "bastion3.example.com"
+
+    def test_extends_child_python_field_name_overrides_parent(self) -> None:
+        """The Python field name and the kebab key are one key when merging."""
+        cfg = Config.model_validate(
+            {
+                "ssh-endpoints": {
+                    "jump1": {"host": "jump1.example.com"},
+                    "jump2": {"host": "jump2.example.com"},
+                    "parent": {
+                        "host": "parent.internal",
+                        "proxy-jump": "jump1",
+                        "location": "home",
+                        "connection-options": {"connect-timeout": 30},
+                    },
+                    "child": {
+                        "extends": "parent",
+                        "proxy_jumps": ["jump2"],
+                        "locations": ["away"],
+                        "connection_options": {"compress": True},
+                    },
+                },
+            },
+        )
+        child = cfg.ssh_endpoints["child"]
+        assert [ep.host for ep in resolve_proxy_chain(cfg, child)] == [
+            "jump2.example.com",
+        ]
+        assert child.location_list == ["away"]
+        assert child.connection_options.connect_timeout == 30
+        assert child.connection_options.compress is True
 
     def test_extends_merges_connection_options(self, tmp_path: Path) -> None:
         p = tmp_path / "extends_options.yaml"

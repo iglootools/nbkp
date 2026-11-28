@@ -1,13 +1,11 @@
 """The ``nbkp preflight troubleshoot`` command: preflight checks with fixes."""
 
-from typing import Annotated
-
 import typer
 from rich.console import Console
 
 from nbkp.cliwiring.config import load_config_or_exit, resolve_endpoints
 from nbkp.cliwiring.invocation import Invocation
-from nbkp.cliwiring.mount import managed_mount
+from nbkp.cliwiring.mount import managed_mount_or_exit
 from nbkp.cliwiring.options import (
     CONFIG_OPTION,
     EXCLUDE_LOCATION_OPTION,
@@ -21,12 +19,12 @@ from nbkp.cliwiring.output_format import OutputFormat, echo_json
 from nbkp.cliwiring.preflight import check_all_with_progress
 from nbkp.cliwiring.runtime import runtime_of
 from nbkp.policy import Strictness
+from nbkp.preflight.cli.options import STRICTNESS_OPTION
 from nbkp.preflight.output import (
     TroubleshootContext,
     format_human_troubleshoot,
     troubleshoot_json,
 )
-from nbkp.preflight.status.result import PreflightResult
 from nbkp.preflight.strictness import has_fatal_errors
 from nbkp.preflight.troubleshoot import (
     TroubleshootIssue,
@@ -39,19 +37,7 @@ def troubleshoot_cmd(
     ctx: typer.Context,
     config: CONFIG_OPTION = None,
     output: OUTPUT_OPTION = OutputFormat.HUMAN,
-    strictness: Annotated[
-        Strictness,
-        typer.Option(
-            "--strictness",
-            "-S",
-            help=(
-                "Which sync problems make the command exit non-zero:"
-                " ignore-none (any), ignore-inactive (all but expected-inactive,"
-                " default), ignore-all (none). Problems on SSH endpoints or"
-                " volumes no sync uses are shown but never fatal"
-            ),
-        ),
-    ] = Strictness.IGNORE_INACTIVE,
+    strictness: STRICTNESS_OPTION = Strictness.IGNORE_INACTIVE,
     location: LOCATION_OPTION = None,
     *,
     exclude_location: EXCLUDE_LOCATION_OPTION = None,
@@ -66,10 +52,17 @@ def troubleshoot_cmd(
     """
     runtime = runtime_of(ctx)
     cfg = load_config_or_exit(runtime, config, output)
-    resolved = resolve_endpoints(cfg, location, exclude_location, network, output)
+    resolved = resolve_endpoints(
+        cfg,
+        location,
+        exclude_location,
+        network,
+        output,
+        ssh_config_path=runtime.ssh_config_path(),
+    )
     invocation = Invocation.of(config, location, exclude_location, network)
 
-    with managed_mount(
+    with managed_mount_or_exit(
         cfg,
         resolved,
         runtime=runtime,
@@ -109,17 +102,15 @@ def troubleshoot_cmd(
             ),
         )
         fatal = has_fatal_errors(preflight.sync_statuses, strictness=strictness)
-        _report(preflight, issues, context, output, strictness, fatal=fatal)
+        _report(issues, context, output, fatal=fatal)
         if fatal:
             raise typer.Exit(1)
 
 
 def _report(
-    preflight: PreflightResult,
     issues: list[TroubleshootIssue],
     ctx: TroubleshootContext,
     output: OutputFormat,
-    strictness: Strictness,
     *,
     fatal: bool,
 ) -> None:
@@ -127,12 +118,4 @@ def _report(
         case OutputFormat.JSON:
             echo_json(troubleshoot_json(issues, ctx, has_fatal_errors=fatal))
         case OutputFormat.HUMAN:
-            Console().print(
-                format_human_troubleshoot(
-                    preflight.ssh_endpoint_statuses,
-                    preflight.volume_statuses,
-                    preflight.sync_statuses,
-                    context=ctx,
-                    strictness=strictness,
-                ),
-            )
+            Console().print(format_human_troubleshoot(issues, ctx))

@@ -21,7 +21,6 @@ fakes.
 """
 
 import shutil
-from pathlib import Path
 
 from nbkp.config import LocalVolume, RemoteVolume, Volume
 from nbkp.disks import (
@@ -31,7 +30,11 @@ from nbkp.disks import (
     probe_mount_tools as _probe_mount_tools,
 )
 from nbkp.fsprotocol import VOLUME_SENTINEL
-from nbkp.preflight.probes import check_rsync_version
+from nbkp.preflight.probes import (
+    VolumeReadError,
+    check_file_exists,
+    check_rsync_version,
+)
 from nbkp.preflight.snapshot_checks import (
     check_btrfs_mount_option,
     is_btrfs_filesystem,
@@ -52,7 +55,7 @@ from nbkp.remote.errors import describe_error, is_auth_error, ssh_connection_err
 
 def observe_ssh_endpoint(
     volume: Volume,
-    resolved_endpoints: ResolvedEndpoints | None = None,
+    resolved_endpoints: ResolvedEndpoints,
     *,
     probe_mount_tools: bool = False,
     run: VolumeCommandRunner = run_on_volume,
@@ -68,7 +71,7 @@ def observe_ssh_endpoint(
     *probe_mount_tools* should be True when any volume on this host has
     mount config.
     """
-    resolved = resolved_endpoints or {}
+    resolved = resolved_endpoints
     match volume:
         case LocalVolume():
             return _observe_ssh_endpoint_local(
@@ -201,10 +204,10 @@ def _probe_host_tools(
 def observe_volume(
     volume: Volume,
     host_tools: HostToolCapabilities,
-    mount_tools: MountToolCapabilities | None = None,
-    resolved_endpoints: ResolvedEndpoints | None = None,
-    mount_observation: MountObservation | None = None,
     *,
+    resolved_endpoints: ResolvedEndpoints,
+    mount_tools: MountToolCapabilities | None = None,
+    mount_observation: MountObservation | None = None,
     platform: str,
     run: VolumeCommandRunner = run_on_volume,
 ) -> VolumeDiagnostics:
@@ -217,18 +220,23 @@ def observe_volume(
     *host_tools* and *mount_tools* come from the SSH endpoint observation;
     *platform* is the orchestrator's ``sys.platform``.
     """
-    resolved = resolved_endpoints or {}
+    resolved = resolved_endpoints
+    sentinel_exists, sentinel_unreadable = _probe_volume_sentinel(
+        volume,
+        resolved,
+        run=run,
+    )
     caps = (
         check_volume_capabilities(
             volume,
             host_tools,
-            mount_tools,
-            resolved,
-            mount_observation,
+            resolved_endpoints=resolved,
+            mount_tools=mount_tools,
+            mount_observation=mount_observation,
             platform=platform,
             run=run,
         )
-        if _volume_sentinel_exists(volume, resolved, run=run)
+        if sentinel_exists
         else _sentinel_only_capabilities(
             volume,
             mount_tools,
@@ -237,7 +245,20 @@ def observe_volume(
             run=run,
         )
     )
-    return VolumeDiagnostics(capabilities=caps)
+    return VolumeDiagnostics(capabilities=caps, sentinel_unreadable=sentinel_unreadable)
+
+
+def _probe_volume_sentinel(
+    volume: Volume,
+    resolved_endpoints: ResolvedEndpoints,
+    *,
+    run: VolumeCommandRunner,
+) -> tuple[bool, str | None]:
+    """Return whether the volume sentinel exists, and why that is unknown if it is."""
+    try:
+        return (_volume_sentinel_exists(volume, resolved_endpoints, run=run), None)
+    except VolumeReadError as e:
+        return (False, e.detail)
 
 
 def _volume_sentinel_exists(
@@ -253,32 +274,24 @@ def _volume_sentinel_exists(
     location: treated as sentinel-missing (inactive).
 
     For a remote volume, SSH reachability has already been verified at the
-    SSH endpoint level.
+    SSH endpoint level. Raises :class:`VolumeReadError` when the sentinel's
+    presence cannot be told (see :func:`check_file_exists`).
     """
-    if volume.path is None:
-        return False
-    sentinel_path = f"{volume.path}/{VOLUME_SENTINEL}"
-    match volume:
-        case LocalVolume():
-            return Path(sentinel_path).is_file()
-        case RemoteVolume():
-            return (
-                run(
-                    ["test", "-f", sentinel_path],
-                    volume,
-                    resolved_endpoints,
-                ).returncode
-                == 0
-            )
+    return volume.path is not None and check_file_exists(
+        volume,
+        f"{volume.path}/{VOLUME_SENTINEL}",
+        resolved_endpoints,
+        run=run,
+    )
 
 
 def check_volume_capabilities(
     volume: Volume,
     host_tools: HostToolCapabilities,
-    mount_tools: MountToolCapabilities | None = None,
-    resolved_endpoints: ResolvedEndpoints | None = None,
-    mount_observation: MountObservation | None = None,
     *,
+    resolved_endpoints: ResolvedEndpoints,
+    mount_tools: MountToolCapabilities | None = None,
+    mount_observation: MountObservation | None = None,
     platform: str,
     run: VolumeCommandRunner = run_on_volume,
 ) -> VolumeCapabilities:
@@ -291,7 +304,7 @@ def check_volume_capabilities(
     orchestrator's ``sys.platform``) decides how a local volume's filesystem
     type is probed.
     """
-    resolved = resolved_endpoints or {}
+    resolved = resolved_endpoints
     fs_type = (
         probe_filesystem_type(volume, resolved, platform=platform, run=run)
         if host_tools.has_stat

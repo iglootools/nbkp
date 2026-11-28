@@ -3,7 +3,6 @@
 import typer
 
 from nbkp.cliwiring.config import load_config_or_exit, resolve_endpoints
-from nbkp.cliwiring.disks import probe_and_show_status, require_known_names
 from nbkp.cliwiring.options import (
     CONFIG_OPTION,
     EXCLUDE_LOCATION_OPTION,
@@ -13,14 +12,15 @@ from nbkp.cliwiring.options import (
 )
 from nbkp.cliwiring.output_format import OutputFormat
 from nbkp.cliwiring.runtime import runtime_of
-from nbkp.disks.cli.options import NAME_OPTION
+from nbkp.disks.cli.common import probe_and_show_status, require_known_names
+from nbkp.disks.cli.options import VOLUME_OPTION
 
 
 def status_cmd(
     ctx: typer.Context,
     config: CONFIG_OPTION = None,
     output: OUTPUT_OPTION = OutputFormat.HUMAN,
-    name: NAME_OPTION = None,
+    volume: VOLUME_OPTION = None,
     location: LOCATION_OPTION = None,
     *,
     exclude_location: EXCLUDE_LOCATION_OPTION = None,
@@ -29,6 +29,13 @@ def status_cmd(
     """Show mount status for volumes with mount config."""
     runtime = runtime_of(ctx)
     cfg = load_config_or_exit(runtime, config, output)
-    require_known_names(cfg, name, output)
-    resolved = resolve_endpoints(cfg, location, exclude_location, network, output)
-    probe_and_show_status(cfg, resolved, output, name, run=runtime.run)
+    require_known_names(cfg, volume, output)
+    resolved = resolve_endpoints(
+        cfg,
+        location,
+        exclude_location,
+        network,
+        output,
+        ssh_config_path=runtime.ssh_config_path(),
+    )
+    probe_and_show_status(cfg, resolved, output, volume, run=runtime.run)

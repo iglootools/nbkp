@@ -12,7 +12,6 @@ from textwrap import dedent
 
 import pytest
 
-from nbkp.cliwiring.lock import hold_run_lock, resolve_run_lock_path
 from nbkp.config import (
     Config,
     HardLinkSnapshotConfig,
@@ -25,6 +24,7 @@ from nbkp.config import (
 from nbkp.fsprotocol import LATEST_LINK, SNAPSHOTS_DIR, VOLUME_SENTINEL
 from nbkp.policy import Strictness
 from nbkp.run.pipeline import check_and_run
+from nbkp.runlock import hold_run_lock, resolve_run_lock_path
 from nbkp.sh import ScriptOptions, generate_script
 from nbkp.sync import RunOptions, SyncFailureKind
 from nbkp.sync.testkit.seed import (
@@ -131,6 +131,7 @@ def _run_script(
         config,
         ScriptOptions(platform=sys.platform, config_path="test.yaml"),
         now=_NOW,
+        resolved_endpoints={},
     )
     script_path = tmp_path / "backup.sh"
     script_path.write_text(script, encoding="utf-8")
@@ -191,8 +192,8 @@ def _write_rm_refusing(bin_dir: Path, name: str) -> None:
     """
     Write an ``rm`` on *bin_dir* that fails for paths containing *name*.
 
-    While ``latest`` points to /dev/null, orphan cleanup removes every
-    snapshot; this keeps one in place, as a cleanup that failed would.
+    It stands in for a deletion that fails: a snapshot that cannot be pruned, or an
+    orphan that cannot be removed.
     """
     fake_rm = bin_dir / "rm"
     fake_rm.write_text(
@@ -204,6 +205,27 @@ def _write_rm_refusing(bin_dir: Path, name: str) -> None:
         encoding="utf-8",
     )
     fake_rm.chmod(0o755)
+
+
+def _write_rsync_leaving_snapshot(bin_dir: Path, snapshot_dir: Path) -> None:
+    """
+    Write an ``rsync`` on *bin_dir* that creates *snapshot_dir* after a snapshot sync.
+
+    A failed orphan cleanup now fails the sync, so a snapshot newer than ``latest``
+    can only be present at prune time when it appears after the cleanup. This
+    stands in for that, to test the prune guards against it.
+    """
+    fake_rsync = bin_dir / "rsync"
+    quoted = shlex.quote(str(snapshot_dir))
+    fake_rsync.write_text(
+        dedent(f"""\
+            #!/bin/sh
+            {shutil.which("rsync")} "$@" || exit $?
+            case "$*" in *'/{SNAPSHOTS_DIR}/'*) mkdir -p {quoted} ;; esac
+        """),
+        encoding="utf-8",
+    )
+    fake_rsync.chmod(0o755)
 
 
 def _write_rsync_vanishing_from_src(bin_dir: Path) -> None:
@@ -241,6 +263,7 @@ class TestGeneratedScriptSyntax:
             config,
             ScriptOptions(platform=sys.platform, config_path="t.yaml", portable=False),
             now=_NOW,
+            resolved_endpoints={},
         )
         result = subprocess.run(
             ["bash", "-n"],
@@ -263,6 +286,7 @@ class TestGeneratedScriptSyntax:
             config,
             ScriptOptions(platform=sys.platform, config_path="test.yaml"),
             now=_NOW,
+            resolved_endpoints={},
         )
         result = subprocess.run(
             ["/bin/bash", "-n"],
@@ -476,6 +500,21 @@ class TestGeneratedScriptExecution:
         assert "Completed sync: step-1" in result.stderr
         assert not (tmp_path / _DST_DIR / "sample.txt").exists()
 
+    @pytest.mark.skipif(os.geteuid() == 0, reason="root searches every directory")
+    def test_unsearchable_destination_breaks_sync(self, tmp_path: Path) -> None:
+        """Like `nbkp run`: a sentinel nobody can tell about is not inactive."""
+        config = _seeded_chain(tmp_path)
+        dst = tmp_path / _DST_DIR
+        dst.chmod(0o600)
+        try:
+            result = _run_script(config, tmp_path)
+        finally:
+            dst.chmod(0o700)
+
+        assert result.returncode != 0
+        assert "cannot tell whether destination volume sentinel" in result.stderr
+        assert "SKIPPED step-2: inactive" not in result.stderr
+
     def test_inactive_upstream_cancels_downstream(self, tmp_path: Path) -> None:
         config = _seeded_chain(tmp_path)
         (tmp_path / _SRC_DIR / VOLUME_SENTINEL).unlink()
@@ -589,24 +628,63 @@ class TestGeneratedScriptExecution:
         assert "preflight errors ignored (ignore-all), attempting" in result.stderr
         assert len(_snapshot_names(tmp_path)) == 1
 
-    @pytest.mark.skipif(os.geteuid() == 0, reason="root ignores directory permissions")
     def test_prune_failure_is_a_warning(self, tmp_path: Path) -> None:
         """As in `nbkp run`: the new snapshot stands when pruning fails."""
         config = _seeded_chain(tmp_path, max_snapshots=1)
-        old = _stage(tmp_path) / SNAPSHOTS_DIR / "2020-01-01T00-00-00.000Z"
-        (old / "sub").mkdir(parents=True)
-        (old / "sub" / "f").write_text("x")
-        (old / "sub").chmod(0o555)
-        try:
-            result = _run_script(config, tmp_path)
-        finally:
-            (old / "sub").chmod(0o755)
+        name = "2020-01-01T00-00-00.000Z"
+        old = _stage(tmp_path) / SNAPSHOTS_DIR / name
+        old.mkdir(parents=True)
+        latest = _stage(tmp_path) / LATEST_LINK
+        latest.unlink()
+        latest.symlink_to(f"{SNAPSHOTS_DIR}/{name}")
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+        _write_rm_refusing(bin_dir, name)
+        env = {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
+
+        result = _run_script(config, tmp_path, env=env)
 
         assert result.returncode == 0, result.stderr
         assert "WARN: pruning failed" in result.stderr
         assert "Completed sync: step-1" in result.stderr
         assert old.exists()
         assert (tmp_path / _DST_DIR / "sample.txt").exists()
+
+    def test_orphan_that_cannot_be_removed_fails_the_sync(self, tmp_path: Path) -> None:
+        """As in `nbkp run`: latest never moves past an incomplete snapshot."""
+        config = _seeded_chain(tmp_path)
+        orphan = "2020-01-01T00-00-00.000Z"
+        (_stage(tmp_path) / SNAPSHOTS_DIR / orphan).mkdir(parents=True)
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+        _write_rm_refusing(bin_dir, orphan)
+        env = {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
+
+        result = _run_script(config, tmp_path, env=env)
+
+        assert result.returncode == 1
+        assert "ERROR: failed to remove orphaned snapshot" in result.stderr
+        assert _snapshot_names(tmp_path) == [orphan]
+        assert str((_stage(tmp_path) / LATEST_LINK).readlink()) == "/dev/null"
+
+    @pytest.mark.skipif(os.geteuid() == 0, reason="root ignores directory permissions")
+    def test_prune_deletes_snapshot_with_read_only_directories(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """As in `nbkp run`: `rsync -a` keeps read-only modes, which prune overrides."""
+        config = _seeded_chain(tmp_path, max_snapshots=1)
+        old = _stage(tmp_path) / SNAPSHOTS_DIR / "2020-01-01T00-00-00.000Z"
+        (old / "ro" / "unlistable").mkdir(parents=True)
+        (old / "ro" / "f").write_text("x")
+        (old / "ro" / "unlistable").chmod(0o000)
+        (old / "ro").chmod(0o555)
+
+        result = _run_script(config, tmp_path)
+
+        assert result.returncode == 0, result.stderr
+        assert "pruning failed" not in result.stderr
+        assert not old.exists()
 
     def test_prune_keeps_snapshots_when_latest_cannot_be_read(
         self,
@@ -620,8 +698,7 @@ class TestGeneratedScriptExecution:
         the future-dated one) would be pruned from under latest.
         """
         config = _seeded_chain(tmp_path, max_snapshots=1)
-        future = "2099-01-01T00-00-00.000Z"
-        (_stage(tmp_path) / SNAPSHOTS_DIR / future).mkdir()
+        future = _stage(tmp_path) / SNAPSHOTS_DIR / "2099-01-01T00-00-00.000Z"
         bin_dir = tmp_path / "bin"
         bin_dir.mkdir()
         flaky_readlink = bin_dir / "readlink"
@@ -635,7 +712,7 @@ class TestGeneratedScriptExecution:
             encoding="utf-8",
         )
         flaky_readlink.chmod(0o755)
-        _write_rm_refusing(bin_dir, future)
+        _write_rsync_leaving_snapshot(bin_dir, future)
         env = {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
 
         result = _run_script(config, tmp_path, env=env)
@@ -708,21 +785,19 @@ class TestGeneratedScriptExecution:
         """
         As in `nbkp run`: a failed sync's leftover never costs a complete snapshot.
 
-        The fake rm keeps the future-dated leftover through orphan cleanup, as a
-        cleanup that failed would. Counted, it would make the previous complete
-        snapshot the excess.
+        The fake rsync leaves the future-dated leftover after orphan cleanup.
+        Counted, it would make the previous complete snapshot the excess.
         """
         config = _seeded_chain(tmp_path, max_snapshots=2)
         snapshots = _stage(tmp_path) / SNAPSHOTS_DIR
         previous, leftover = "2020-01-01T00-00-00.000Z", "2099-01-01T00-00-00.000Z"
-        for name in (previous, leftover):
-            (snapshots / name).mkdir()
+        (snapshots / previous).mkdir()
         latest = _stage(tmp_path) / LATEST_LINK
         latest.unlink()
         latest.symlink_to(f"{SNAPSHOTS_DIR}/{previous}")
         bin_dir = tmp_path / "bin"
         bin_dir.mkdir()
-        _write_rm_refusing(bin_dir, leftover)
+        _write_rsync_leaving_snapshot(bin_dir, snapshots / leftover)
         env = {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
 
         result = _run_script(config, tmp_path, env=env)
@@ -809,12 +884,29 @@ class TestGeneratedScriptExecution:
         assert _snapshot_names(tmp_path) == [future]
         assert str(Path(latest).readlink()) == f"{SNAPSHOTS_DIR}/{future}"
 
+    def test_dry_run_reports_snapshot_not_after_latest(self, tmp_path: Path) -> None:
+        """As in `nbkp run`: the dry run fails where the real run would."""
+        config = _seeded_chain(tmp_path)
+        future = "2099-01-01T00-00-00.000Z"
+        (_stage(tmp_path) / SNAPSHOTS_DIR / future).mkdir()
+        latest = _stage(tmp_path) / LATEST_LINK
+        latest.unlink()
+        latest.symlink_to(f"{SNAPSHOTS_DIR}/{future}")
+
+        result = _run_script(config, tmp_path, "--dry-run")
+
+        assert result.returncode == 1
+        assert "is the clock behind?" in result.stderr
+        assert _snapshot_names(tmp_path) == [future]
+
     def test_existing_snapshot_dir_is_not_reused(self, tmp_path: Path) -> None:
         """
         Mkdir without -p: a name collision fails the sync.
 
-        Here the collision is with a leftover that orphan cleanup failed to remove, so a
-        failed rsync never removes a snapshot it did not create.
+        Orphan cleanup removes, or fails the sync on, any snapshot newer than
+        latest, so the colliding directory has to appear after it: the fake `date`
+        creates it when the new snapshot is named. A failed rsync then never
+        removes a snapshot it did not create.
         """
         config = _seeded_chain(tmp_path)
         fake_bin = tmp_path / "bin"
@@ -823,13 +915,19 @@ class TestGeneratedScriptExecution:
         fixed = "2026-02-21T12:00:00.000Z"
         if sys.platform == "darwin":
             fixed = fixed.replace(":", "-")
-        fake_date = fake_bin / "date"
-        fake_date.write_text(f"#!/bin/sh\necho '{fixed}'\n")
-        fake_date.chmod(0o755)
-        _write_rm_refusing(fake_bin, fixed)
         existing = _stage(tmp_path) / SNAPSHOTS_DIR / fixed
-        existing.mkdir()
-        (existing / "keep.txt").write_text("keep")
+        quoted = shlex.quote(str(existing))
+        fake_date = fake_bin / "date"
+        fake_date.write_text(
+            dedent(f"""\
+                #!/bin/sh
+                if [ ! -d {quoted} ]; then
+                    mkdir {quoted} && printf keep > {quoted}/keep.txt
+                fi
+                echo '{fixed}'
+            """),
+        )
+        fake_date.chmod(0o755)
         env = {**os.environ, "PATH": f"{fake_bin}:{os.environ['PATH']}"}
 
         result = _run_script(config, tmp_path, env=env)

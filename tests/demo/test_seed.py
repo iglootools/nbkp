@@ -4,6 +4,7 @@ import shlex
 import subprocess
 from pathlib import Path
 
+import paramiko
 import pytest
 from typer.testing import CliRunner
 
@@ -21,6 +22,7 @@ from nbkp.demo.seed import (
     SeedError,
     SeedErrorKind,
     SeedResult,
+    as_seed_errors,
     docker_demo_config,
     encrypted_volume_mounted,
     seed_demo,
@@ -28,6 +30,7 @@ from nbkp.demo.seed import (
     seed_steps,
 )
 from nbkp.disks import MountResult, UmountFailureKind, UmountResult
+from nbkp.remote.resolution import SshConfigError, SshConfigErrorKind
 from nbkp.remote.testkit.constants import LUKS_PASSPHRASE
 from tests.fakes import FakeCommandRunner, completed
 from tests.fixtures.disks import UUID, encrypted_volume
@@ -107,6 +110,18 @@ class TestDockerExtra:
         assert exc.value.kind == SeedErrorKind.DOCKER_EXTRA_MISSING
         assert not exc.value.may_leave_containers
         assert "nbkp[docker]" in format_seed_error(exc.value)
+
+    def test_reseeding_a_docker_seed_dir_fails_before_any_container(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Regression: the key's exclusive mkdir failed after the checks passed."""
+        (tmp_path / "ssh").mkdir()
+        with pytest.raises(SeedError) as exc:
+            seed_demo(tmp_path, docker=True, has_docker=True)
+        assert exc.value.kind == SeedErrorKind.SEED_DIR_REUSED
+        assert exc.value.detail == str(tmp_path / "ssh")
+        assert not exc.value.may_leave_containers
 
 
 _ENC = Config(volumes={"enc": encrypted_volume()})
@@ -234,6 +249,27 @@ class TestStepFailure:
         assert exc.value.kind == SeedErrorKind.FILE_OPERATION_FAILED
         assert str(base_dir) in format_seed_error(exc.value)
 
+    def test_cli_prints_the_summary_and_commands_after_a_successful_seed(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        result = CliRunner().invoke(
+            app,
+            [
+                "seed",
+                "--no-docker",
+                "--big-file-size",
+                "0",
+                "--base-dir",
+                str(tmp_path),
+            ],
+            env={"COLUMNS": "400"},
+        )
+
+        assert result.exit_code == 0, result.output
+        assert str(tmp_path / "config.yaml") in result.stdout
+        assert "CFG=" in result.stdout
+
     def test_cli_reports_a_file_error_without_a_traceback(
         self,
         tmp_path: Path,
@@ -253,7 +289,34 @@ class TestStepFailure:
         )
         assert result.exit_code == 1, result.output
         assert not isinstance(result.exception, OSError)
-        assert "Writing the demo files failed" in result.output
+        assert "Writing the demo files failed" in result.stderr
+        assert "Writing the demo files failed" not in result.stdout
+
+
+class TestAsSeedErrors:
+    @pytest.mark.parametrize(
+        ("error", "kind"),
+        [
+            (paramiko.SSHException("No existing session"), SeedErrorKind.SSH_FAILED),
+            (EOFError(), SeedErrorKind.SSH_FAILED),
+            (
+                SshConfigError(SshConfigErrorKind.INVALID_PORT, "nas", "abc"),
+                SeedErrorKind.SSH_CONFIG_INVALID,
+            ),
+            (TimeoutError("no banner"), SeedErrorKind.SSH_NOT_READY),
+            (PermissionError("denied"), SeedErrorKind.FILE_OPERATION_FAILED),
+        ],
+    )
+    def test_step_failure_becomes_a_seed_error(
+        self,
+        error: Exception,
+        kind: SeedErrorKind,
+    ) -> None:
+        """Regression: SSH and SSH-config errors escaped as tracebacks."""
+        with pytest.raises(SeedError) as exc, as_seed_errors():
+            raise error
+        assert exc.value.kind == kind
+        assert exc.value.__cause__ is error
 
 
 class TestSeedErrorRendering:

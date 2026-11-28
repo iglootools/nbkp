@@ -103,7 +103,7 @@ class TestVolumesStatusCommand:
             write_config(tmp_path, _mount_config_for_status()),
             "-o",
             "json",
-            "--name",
+            "--volume",
             "plain-drive",
             run=unreachable,
         )
@@ -129,7 +129,7 @@ class TestVolumesStatusCommand:
             write_config(tmp_path, _mount_config_for_status()),
             "-o",
             "json",
-            "--name",
+            "--volume",
             "plain-drive",
             run=no_test,
         )
@@ -148,7 +148,7 @@ class TestVolumesStatusCommand:
             write_config(tmp_path, _mount_config_for_status()),
             "-o",
             "json",
-            "--name",
+            "--volume",
             "encrypted-drive",
             run=run,
         )

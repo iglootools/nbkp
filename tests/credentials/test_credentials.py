@@ -1,6 +1,7 @@
 import subprocess
 import sys
 from collections.abc import Callable, Iterator
+from pathlib import Path
 
 import keyring
 import pytest
@@ -202,6 +203,18 @@ class TestRetrievePassphraseCommand:
         )
 
         assert ran == [["op", "read", "op://vault/my-drive/password"]]
+
+    def test_expands_tilde_in_the_program_only(self) -> None:
+        ran, run = _command_runner(stdout="secret")
+
+        retrieve_passphrase(
+            "disk1",
+            CredentialProvider.COMMAND,
+            command_template=["~/bin/get-pass", "~{id}"],
+            run=run,
+        )
+
+        assert ran == [[str(Path("~/bin/get-pass").expanduser()), "~disk1"]]
 
     def test_raises_on_command_failure(self) -> None:
         _, run = _command_runner(returncode=1, stderr="not found")

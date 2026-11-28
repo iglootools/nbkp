@@ -81,7 +81,7 @@ to each for the hard parts:
   guard, not an external tool: a sync runs only when all its sentinels are
   present, so an unmounted or wrong drive is skipped rather than written to:
   [Sentinels](./domain.md#sentinels-presence-is-proven).
-- **util-linux / coreutils** (`findmnt`, `lsblk`, `stat`, `which`, `test`, …) —
+- **util-linux / coreutils** (`findmnt`, `lsblk`, `stat`, `test`, …) —
   the small probes behind preflight and mount discovery: `findmnt` (where a
   device is mounted + live mount options), `lsblk` (the unlocked cleartext
   device), `stat` (btrfs detection). Their availability is itself checked:
@@ -116,6 +116,7 @@ graph TD
     preflight["preflight/"]
     remote["remote/"]
     run["run/"]
+    runlock["runlock"]
     sh["sh/"]
     snapshots["snapshots/"]
     sync["sync/"]
@@ -138,6 +139,7 @@ graph TD
     cliwiring --> policy
     cliwiring --> preflight
     cliwiring --> remote
+    cliwiring --> runlock
     cliwiring --> sync
     cliwiring --> theme
     config --> cliwiring
@@ -147,11 +149,13 @@ graph TD
     credentials --> theme
     demo --> cliwiring
     demo --> config
+    demo --> credentials
     demo --> disks
     demo --> ordering
     demo --> policy
     demo --> preflight
     demo --> remote
+    demo --> run
     demo --> snapshots
     demo --> sync
     demo --> theme
@@ -182,11 +186,14 @@ graph TD
     run --> remote
     run --> sync
     run --> theme
+    runlock --> config
     sh --> cliwiring
     sh --> config
     sh --> fsprotocol
     sh --> ordering
     sh --> remote
+    sh --> runlock
+    sh --> snapshots
     sh --> sync
     snapshots --> cliwiring
     snapshots --> config
@@ -221,11 +228,11 @@ dependencies; the contracts are what reject a new import that breaks a rule:
 - **No module imports another module's `cli/` package.** Wiring that several
   sub-apps need — the options they share (`options.py`), loading the config
   (`load_config_or_exit`), resolving endpoints, the managed mount lifecycle and
-  its progress bars, the run lock, preflight checks with progress, and the
-  `Runtime` holding the host I/O a command performs — lives in `cliwiring/`,
-  which only `cli/` sub-apps and the root `cli/` app import. Only the root
-  `cli/` app imports the sub-apps, and nothing in nbkp imports the root app: the
-  `nbkp` entry point is its only caller.
+  its progress bars, what a command prints when the run lock is held, preflight
+  checks with progress, and the `Runtime` holding the host I/O a command
+  performs — lives in `cliwiring/`, which only `cli/` sub-apps and the root
+  `cli/` app import. Only the root `cli/` app imports the sub-apps, and nothing
+  in nbkp imports the root app: the `nbkp` entry point is its only caller.
 - **Decisions live in core, display in `output` modules.** `policy` holds
   `Strictness`, `Severity` and `classify_severity` — whether a finding is fatal
   — and is what core modules (`sync/`, `run/`, `preflight/`, `disks/`) import.
@@ -261,7 +268,7 @@ dependencies; the contracts are what reject a new import that breaks a rule:
 - **Core packages are ordered.** From the top:
 
   ```text
-  demo → run | sh → sync → snapshots → preflight → disks → credentials | ordering → remote → policy | fsprotocol → config
+  demo → run | sh → sync → snapshots → preflight → disks → credentials | ordering → remote → policy | fsprotocol | runlock → config
   ```
 
   A package imports only the packages below it, and siblings (`|`) do not import
@@ -291,10 +298,10 @@ Where each concern lives, ordered by the layers above, from the base up:
 | Layer | Packages | Contents |
 |---|---|---|
 | Base | `config/` | Config models (`config/protocol/`: one module per entity, plus `errors.py` for validation codes) and the YAML `loader.py` |
-| Shared leaves | `policy.py`, `fsprotocol.py` | `policy`: strictness and severity classification. `fsprotocol`: sentinel names, directory layout, snapshot types |
+| Shared leaves | `policy.py`, `fsprotocol.py`, `runlock.py` | `policy`: strictness and severity classification. `fsprotocol`: sentinel names, directory layout, snapshot types. `runlock`: where the run lock lives and how it is held, shared by every command that mounts drives or modifies destinations and by the script `sh` generates |
 | Transport | `remote/` | Endpoint models and selection (`endpoints.py`, `resolution.py`), SSH argument building (`ssh.py`), Fabric/Paramiko (`fabricssh.py`) and per-command connection reuse (`pool.py`), transport primitives (`dispatch.py`) |
 | Domain cores | `credentials/`, `ordering/`, `disks/`, `preflight/`, `snapshots/`, `sync/`, `run/`, `sh/` (from the base up) | The behavior of each command, described below |
-| CLI wiring | `cliwiring/` | Wiring shared by sub-apps: shared command-line options, the `--output` formats and JSON printing (`output_format.py`), the step progress bar (`progress.py`), the `Invocation` that echoes the current flags in suggested follow-up commands (`invocation.py`; preflight's reports take it through the `SuggestedCommands` protocol in `preflight/output/commands.py`), config loading, credential prompting, the mount lifecycle and its progress bars, the run lock that every command mounting drives or modifying destinations holds (`lock.py`), preflight with progress, and the `Runtime` ports (`runtime.py`: host commands, local tools, rsync, clock, credential sources, and the environment, home and platform directories the config search reads) that the root callback installs and tests replace |
+| CLI wiring | `cliwiring/` | Wiring shared by sub-apps: shared command-line options, the `--output` formats and JSON printing (`output_format.py`), the step progress bar (`progress.py`), the `Invocation` that echoes the current flags in suggested follow-up commands (`invocation.py`; preflight's reports take it through the `SuggestedCommands` protocol in `preflight/output/commands.py`), config loading, credential prompting, the mount lifecycle and its progress bars, holding the run lock or exiting when another command holds it (`lock.py`), preflight with progress, and the `Runtime` ports (`runtime.py`: host commands, local tools, rsync, clock, credential sources, and the environment, home and platform directories the config search reads) that the root callback installs and tests replace |
 | Presentation | `theme/` | Severity display, dry-run labels |
 | Root app | `cli/` | The top-level Typer app (`app.py`), which mounts every sub-app |
 
@@ -323,8 +330,11 @@ Domain cores:
   (`orchestration.py`, `results.py`), and one module per snapshot mode in
   `modes/` (`plain`, `btrfs`, `hardlink`).
 - **`ordering/`** — the backup graph and its topological order (`graph.py`).
-- **`run/`** — the `nbkp run` pipeline (`pipeline.py`): prefetch, mount,
-  preflight, sync, unmount.
+- **`run/`** — the `nbkp run` pipeline (`pipeline.py`): preflight, then the
+  syncs. Credential prefetch, mount and unmount wrap it from
+  `cliwiring/mount.py` (`managed_mount`). Its presentation, the results panel,
+  the abort message and `run -o json`, is in `output.py`, which `demo output`
+  renders too.
 - **`sh/`** — standalone script generation: per-sync facts (`spec.py`),
   preflight and sync steps (`preflight.py`, `steps.py`), shell quoting
   (`quoting.py`), and the `backup.sh.j2` template.

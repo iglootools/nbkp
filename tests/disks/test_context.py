@@ -1,7 +1,5 @@
 """Tests for nbkp.disks.context (mount lifecycle context manager)."""
 
-from collections.abc import Callable
-
 import pytest
 
 from nbkp.config import (
@@ -10,7 +8,7 @@ from nbkp.config import (
     LuksEncryptionConfig,
     MountConfig,
 )
-from nbkp.credentials import CredentialError, CredentialErrorKind
+from nbkp.credentials import CredentialError, CredentialErrorKind, PassphraseFn
 from nbkp.disks.context import managed_mount, mount_phase
 from tests.fakes import FakeCommandRunner, completed
 
@@ -64,7 +62,7 @@ def _udisks_steps(run: FakeCommandRunner) -> list[str]:
     return [cmd[1] for cmd in run.commands_starting_with("udisksctl")]
 
 
-def _recorder(calls: list[str]) -> Callable[[str], str]:
+def _recorder(calls: list[str]) -> PassphraseFn:
     """Return a ``passphrase_fn`` that records the ids it is asked for."""
 
     def passphrase_fn(passphrase_id: str) -> str:

@@ -20,7 +20,7 @@ from nbkp.cliwiring.config import (
     resolve_endpoints,
 )
 from nbkp.cliwiring.invocation import Invocation, format_troubleshoot_hint
-from nbkp.cliwiring.mount import managed_mount
+from nbkp.cliwiring.mount import managed_mount_or_exit
 from nbkp.cliwiring.output_format import OutputFormat
 from nbkp.cliwiring.preflight import check_all_with_progress
 from nbkp.cliwiring.runtime import runtime_of
@@ -78,8 +78,9 @@ def run_snapshot_operation_or_exit[R: ShowResult | PruneResult](
         options.exclude_location,
         options.network,
         output,
+        ssh_config_path=runtime.ssh_config_path(),
     )
-    with managed_mount(
+    with managed_mount_or_exit(
         cfg,
         resolved,
         runtime=runtime,
@@ -118,6 +119,8 @@ def _print_troubleshoot_hint(options: SnapshotCommandOptions) -> None:
                 options.location,
                 options.exclude_location,
                 options.network,
+                strictness=options.strictness,
+                mount=options.mount,
             ),
         ),
         soft_wrap=True,

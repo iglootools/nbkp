@@ -21,13 +21,14 @@ Four-phase check hierarchy (each level gates the next):
 """
 
 import shutil
-from collections.abc import Callable, Collection, Sequence
+from collections.abc import Callable, Collection, Iterable, Sequence
 from dataclasses import dataclass
 from functools import partial
 
 lazy import paramiko
 
 from nbkp.config import (
+    LOCAL_HOST_SLUG,
     Config,
     LocalVolume,
     RemoteVolume,
@@ -51,6 +52,7 @@ from nbkp.preflight.status.result import PreflightResult
 from nbkp.preflight.status.ssh import (
     HostToolCapabilities,
     SshEndpointDiagnostics,
+    SshEndpointErrorKind,
     SshEndpointStatus,
     SshEndpointToolNeeds,
 )
@@ -169,9 +171,16 @@ def check_all_syncs(
         progress,
         run=run,
     )
+    observed_volume_statuses = _with_volumes_dropped_later(
+        volume_statuses,
+        [*src_ep_statuses.values(), *dst_ep_statuses.values()],
+    )
     return PreflightResult(
-        ssh_endpoint_statuses=ssh_statuses,
-        volume_statuses=volume_statuses,
+        ssh_endpoint_statuses=_with_hosts_dropped_later(
+            ssh_statuses,
+            observed_volume_statuses.values(),
+        ),
+        volume_statuses=observed_volume_statuses,
         source_endpoint_statuses=src_ep_statuses,
         destination_endpoint_statuses=dst_ep_statuses,
         sync_statuses=_sync_statuses(
@@ -182,6 +191,47 @@ def check_all_syncs(
             dry_run=dry_run,
         ),
     )
+
+
+def _with_volumes_dropped_later(
+    volume_statuses: dict[str, VolumeStatus],
+    endpoint_statuses: Sequence[SourceEndpointStatus | DestinationEndpointStatus],
+) -> dict[str, VolumeStatus]:
+    """
+    Return *volume_statuses* with the volumes whose host dropped later on.
+
+    A host dropping during the endpoint checks leaves the endpoint carrying its
+    volume's disconnected status; recorded only there, the volume would still
+    read as active in the volumes table and in troubleshoot.
+    """
+    dropped = {
+        ep.volume_status.slug: ep.volume_status
+        for ep in endpoint_statuses
+        if not ep.volume_status.active and volume_statuses[ep.volume_status.slug].active
+    }
+    return {slug: dropped.get(slug, vs) for slug, vs in volume_statuses.items()}
+
+
+def _with_hosts_dropped_later(
+    ssh_statuses: dict[str, SshEndpointStatus],
+    volume_statuses: Iterable[VolumeStatus],
+) -> dict[str, SshEndpointStatus]:
+    """
+    Return *ssh_statuses* with the hosts found unreachable after their own probe.
+
+    A host can answer its probe, then drop while one of its volumes or sync
+    endpoints is observed (see :func:`_disconnected_volume_status`). The
+    unreachable status is then recorded on that volume only; troubleshoot and
+    the SSH table read the endpoint statuses, and skip a volume's
+    ``SSH_ENDPOINT_INACTIVE`` as a pointer to them, so the drop would
+    otherwise be reported nowhere.
+    """
+    dropped = {
+        vs.ssh_endpoint_status.slug: vs.ssh_endpoint_status
+        for vs in volume_statuses
+        if SshEndpointErrorKind.UNREACHABLE in vs.ssh_endpoint_status.errors
+    }
+    return {**ssh_statuses, **dropped}
 
 
 def check_step_count(
@@ -389,12 +439,21 @@ def _excluded_endpoints(
     needed_volumes: set[str],
     resolved_endpoints: ResolvedEndpoints,
 ) -> list[str]:
-    """Primary endpoints of the needed volumes excluded by location (sorted)."""
+    """
+    Candidate endpoints of the needed volumes excluded by location (sorted).
+
+    Resolution excludes a volume only when every candidate is at an excluded
+    location, so each of them is reported as excluded. A primary
+    ``ssh-endpoint`` that ``ssh-endpoints`` leaves out is not a candidate: it
+    stays free for the standalone reachability probe.
+    """
     return sorted(
         {
-            _ssh_endpoint_slug(vol, resolved_endpoints)
+            slug
             for vol in (config.volumes[v] for v in needed_volumes)
-            if location_excluded(vol, resolved_endpoints)
+            if isinstance(vol, RemoteVolume)
+            and location_excluded(vol, resolved_endpoints)
+            for slug in vol.endpoint_candidates
         },
     )
 
@@ -414,15 +473,15 @@ def _volume_ssh_status(
     """
     Return the status of the endpoint *volume* is reached through.
 
-    An excluded volume gets its own excluded status even when another volume
-    reached its primary endpoint, since nothing may reach this one.
+    An excluded volume gets its own excluded status, under its first candidate,
+    even when another volume reached that endpoint, since nothing may reach
+    this one.
     """
-    slug = _ssh_endpoint_slug(volume, resolved_endpoints)
-    return (
-        _excluded_ssh_status(slug)
-        if location_excluded(volume, resolved_endpoints)
-        else ssh_statuses[slug]
-    )
+    match volume:
+        case RemoteVolume() if location_excluded(volume, resolved_endpoints):
+            return _excluded_ssh_status(volume.endpoint_candidates[0])
+        case _:
+            return ssh_statuses[_ssh_endpoint_slug(volume, resolved_endpoints)]
 
 
 def _check_volume_ssh_endpoint(
@@ -466,7 +525,7 @@ def _ssh_endpoint_slug(volume: Volume, resolved_endpoints: ResolvedEndpoints) ->
     """Return the endpoint resolution chose for *volume*, else its primary."""
     match volume:
         case LocalVolume():
-            return "localhost"
+            return LOCAL_HOST_SLUG
         case RemoteVolume() if volume.slug in resolved_endpoints:
             return resolved_endpoints[volume.slug].server.slug
         case RemoteVolume():
@@ -666,25 +725,14 @@ def _check_source_endpoint(
     *,
     run: VolumeCommandRunner,
 ) -> SourceEndpointStatus:
-    try:
-        diagnostics = (
-            observe_source_endpoint(ep, probe.volume, resolved_endpoints, run=run)
-            if probe is not None
-            else None
-        )
-    except ssh_connection_errors() as e:
-        return SourceEndpointStatus.from_diagnostics(
-            endpoint=ep,
-            volume_status=_disconnected_volume_status(
-                volume_status.config,
-                volume_status.ssh_endpoint_status,
-                e,
-            ),
-            diagnostics=None,
-        )
+    diagnostics, observed_volume_status = _observe_endpoint(
+        volume_status,
+        lambda p: observe_source_endpoint(ep, p.volume, resolved_endpoints, run=run),
+        probe,
+    )
     return SourceEndpointStatus.from_diagnostics(
         endpoint=ep,
-        volume_status=volume_status,
+        volume_status=observed_volume_status,
         diagnostics=diagnostics,
     )
 
@@ -697,34 +745,48 @@ def _check_destination_endpoint(
     *,
     run: VolumeCommandRunner,
 ) -> DestinationEndpointStatus:
+    diagnostics, observed_volume_status = _observe_endpoint(
+        volume_status,
+        lambda p: observe_destination_endpoint(
+            ep,
+            p.volume,
+            p.capabilities,
+            resolved_endpoints,
+            host_tools=p.host_tools,
+            run=run,
+        ),
+        probe,
+    )
+    return DestinationEndpointStatus.from_diagnostics(
+        endpoint=ep,
+        volume_status=observed_volume_status,
+        diagnostics=diagnostics,
+    )
+
+
+def _observe_endpoint[D](
+    volume_status: VolumeStatus,
+    observe: Callable[[_EndpointProbe], D],
+    probe: _EndpointProbe | None,
+) -> tuple[D | None, VolumeStatus]:
+    """
+    Observe a sync endpoint, and return its diagnostics and its volume's status.
+
+    No diagnostics when there is nothing to probe (*probe* is ``None``), or when
+    the host drops during the observation: the volume's status is then the
+    disconnected one (see :func:`_disconnected_volume_status`).
+    """
     try:
-        diagnostics = (
-            observe_destination_endpoint(
-                ep,
-                probe.volume,
-                probe.capabilities,
-                resolved_endpoints,
-                host_tools=probe.host_tools,
-                run=run,
-            )
-            if probe is not None
-            else None
-        )
+        return (observe(probe) if probe is not None else None, volume_status)
     except ssh_connection_errors() as e:
-        return DestinationEndpointStatus.from_diagnostics(
-            endpoint=ep,
-            volume_status=_disconnected_volume_status(
+        return (
+            None,
+            _disconnected_volume_status(
                 volume_status.config,
                 volume_status.ssh_endpoint_status,
                 e,
             ),
-            diagnostics=None,
         )
-    return DestinationEndpointStatus.from_diagnostics(
-        endpoint=ep,
-        volume_status=volume_status,
-        diagnostics=diagnostics,
-    )
 
 
 @dataclass(frozen=True)

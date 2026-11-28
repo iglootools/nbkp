@@ -35,6 +35,7 @@ from nbkp.preflight.status.endpoint import (
     DestinationEndpointWarningKind,
     LatestSymlinkState,
     SourceEndpointDiagnostics,
+    SourceEndpointErrorKind,
     SourceEndpointStatus,
 )
 from nbkp.preflight.status.ssh import (
@@ -236,7 +237,7 @@ def _remote_volume() -> tuple[RemoteVolume, dict[str, ResolvedEndpoint]]:
 
 def _host_raising(error: Exception) -> FakeCommandRunner:
     """Script a host whose first probe (``which rsync``) fails with *error*."""
-    return FakeCommandRunner().on("which", returns=error)
+    return FakeCommandRunner().on("sh", "-c", returns=error)
 
 
 class TestObservationExceptions:
@@ -359,6 +360,49 @@ class TestLatestSymlinkTarget:
         state = self._state(tmp_path, "/dev/null")
         assert state.raw_target == "/dev/null"
         assert state.target_valid is None
+
+    def test_remote_latest_is_read_in_one_round_trip(self) -> None:
+        vol, resolved = _remote_volume()
+        endpoint = SyncEndpoint(
+            slug="ep",
+            volume="data",
+            hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
+        )
+        run = FakeCommandRunner().on("readlink", returns=completed(0, "/dev/null\n"))
+        diag = observe_source_endpoint(endpoint, vol, resolved, run=run)
+        assert diag.latest == LatestSymlinkState(exists=True, raw_target="/dev/null")
+        latest = "/data/latest"
+        assert [c for c in run.commands if latest in c] == [["readlink", latest]]
+
+    def test_unreadable_symlink_is_not_absent(self) -> None:
+        vol, resolved = _remote_volume()
+        endpoint = SyncEndpoint(
+            slug="ep",
+            volume="data",
+            hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
+        )
+        # ``latest`` is a symlink (``test -L`` succeeds), but readlink fails.
+        run = FakeCommandRunner().on(
+            "readlink",
+            returns=completed(1, stderr="readlink: Permission denied\n"),
+        )
+        diag = observe_source_endpoint(endpoint, vol, resolved, run=run)
+        status = SourceEndpointStatus.from_diagnostics(
+            endpoint=endpoint,
+            volume_status=VolumeStatus(
+                slug=vol.slug,
+                config=vol,
+                ssh_endpoint_status=_ssh(SshEndpointDiagnostics(host_tools=_TOOLS)),
+                diagnostics=VolumeDiagnostics(capabilities=_BTRFS_CAPS),
+                errors=[],
+            ),
+            diagnostics=diag,
+        )
+        assert diag.latest == LatestSymlinkState(
+            exists=True,
+            unreadable="readlink: Permission denied\n",
+        )
+        assert status.errors == [SourceEndpointErrorKind.LATEST_SYMLINK_UNREADABLE]
 
 
 _SNAPSHOT = "2024-01-01T00:00:00.000Z"

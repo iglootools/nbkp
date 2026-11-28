@@ -18,8 +18,6 @@ from rich.console import Console
 
 from nbkp.cli import app
 from nbkp.cliwiring.credentials import prompt_passphrase
-from nbkp.cliwiring.disks import show_plan
-from nbkp.cliwiring.lock import hold_run_lock
 from nbkp.cliwiring.output_format import OutputFormat
 from nbkp.config import (
     Config,
@@ -32,6 +30,8 @@ from nbkp.config import (
 from nbkp.config.testkit import write_config
 from nbkp.credentials import PromptFn
 from nbkp.disks import MountResult, UmountResult, any_failed, refused_by_polkit
+from nbkp.disks.auth import generate_polkit_rules
+from nbkp.disks.cli.common import show_plan
 from nbkp.disks.models import (
     LifecycleFailure,
     LifecycleStep,
@@ -39,6 +39,7 @@ from nbkp.disks.models import (
 )
 from nbkp.disks.output import format_plan_line
 from nbkp.disks.plan import MountAction, VolumePlan, plan_incomplete
+from nbkp.runlock import hold_run_lock
 from tests.fakes import FakeCommandRunner, FakeRunLock, completed, fake_runtime
 from tests.fixtures.cli import runner
 from tests.fixtures.disks import UUID, encrypted_volume, locked_drive_host
@@ -170,7 +171,7 @@ class TestUnknownNames:
     def test_mount_rejects_unknown_name(self) -> None:
         run = FakeCommandRunner()
 
-        exit_code, output = _invoke(run, "mount", "-n", "typo")
+        exit_code, output = _invoke(run, "mount", "-v", "typo")
 
         assert exit_code == 2
         assert "unknown volume name(s): typo" in output
@@ -179,7 +180,7 @@ class TestUnknownNames:
     def test_umount_rejects_unknown_name_as_json(self) -> None:
         run = FakeCommandRunner()
 
-        exit_code, output = _invoke(run, "umount", "-n", "typo", "-o", "json")
+        exit_code, output = _invoke(run, "umount", "-v", "typo", "-o", "json")
 
         assert exit_code == 2
         error = json.loads(output)["error"]
@@ -282,6 +283,16 @@ class TestUmount:
         assert entry["failure_reason"] == "lock-failed"
         assert entry["detail"] == "lock failed (exit 1): busy"
         assert entry["warning"] == "LUKS container still unlocked, manual lock needed"
+
+    def test_polkit_refusal_suggests_setup_auth(self) -> None:
+        run = _mounted_drive(
+            unmount=completed(1, stderr="Not Authorized to perform operation"),
+        )
+
+        exit_code, output = _invoke(run, "umount")
+
+        assert exit_code == 1
+        assert "nbkp disks setup-auth -c config.yaml" in output
 
     def test_failure_suggests_troubleshoot(self) -> None:
         run = _mounted_drive(unmount=completed(1, stderr="target is busy"))
@@ -493,6 +504,24 @@ class TestDryRun:
         assert output.splitlines() == ["[dry-run] ✓ Would unmount, lock enc"]
         assert _udisks_steps(run) == []
 
+    @pytest.mark.parametrize(
+        ("command", "host"),
+        [("mount", locked_drive_host), ("umount", _mounted_drive)],
+    )
+    def test_short_flag_is_a_dry_run(
+        self,
+        command: str,
+        host: Callable[[], FakeCommandRunner],
+    ) -> None:
+        """``-n`` is ``--dry-run`` here as in every other command."""
+        run = host()
+
+        exit_code, output = _invoke(run, command, "-n", "-v", "enc")
+
+        assert exit_code == 0, output
+        assert output.startswith("[dry-run]")
+        assert _udisks_steps(run) == []
+
     def test_absent_drive_needs_nothing(self) -> None:
         exit_code, output = _invoke(
             FakeCommandRunner().on("test", "-e", returns=FAILS),
@@ -543,3 +572,15 @@ class TestSetupAuth:
             obj=fake_runtime(local_user="alice"),
         )
         assert 'subject.user == "alice"' in result.output
+
+    def test_stdout_holds_only_the_rule_file(self) -> None:
+        """Regression: `#` header lines on stdout made a redirected file invalid."""
+        result = runner.invoke(
+            app,
+            ["disks", "setup-auth", "-c", "config.yaml", "-u", "backup"],
+        )
+        assert result.exit_code == 0, result.output
+        assert result.stdout.rstrip("\n") == generate_polkit_rules("backup").rstrip(
+            "\n",
+        )
+        assert "Install to: /etc/polkit-1/rules.d/50-nbkp.rules" in result.stderr

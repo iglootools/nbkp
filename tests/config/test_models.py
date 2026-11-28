@@ -75,6 +75,15 @@ class TestSshEndpoint:
         server = SshEndpoint(slug="nas-server", host="nas.local")
         assert server.proxy_jump is None
 
+    def test_slug_rejected_when_it_names_the_local_host(self) -> None:
+        with pytest.raises(pydantic.ValidationError) as excinfo:
+            SshEndpoint(slug="localhost", host="nas.local")
+        assert _error_types(excinfo.value) == {ConfigValidationErrorKind.RESERVED_SLUG}
+
+    def test_host_may_be_localhost(self) -> None:
+        server = SshEndpoint(slug="loopback", host="localhost")
+        assert server.host == "localhost"
+
 
 class TestRemoteVolume:
     def test_fields_keep_the_given_values(self) -> None:
@@ -95,6 +104,28 @@ class TestRemoteVolume:
         )
         with pytest.raises((AttributeError, pydantic.ValidationError)):
             vol.path = "other"
+
+    def test_empty_path_rejected_not_turned_into_root(self) -> None:
+        with pytest.raises(pydantic.ValidationError) as excinfo:
+            RemoteVolume.model_validate(
+                {"slug": "nas", "ssh-endpoint": "nas-server", "path": ""},
+            )
+        assert {err["type"] for err in excinfo.value.errors()} == {"string_too_short"}
+
+    @pytest.mark.parametrize(
+        ("raw", "expected"),
+        [("/", "/"), ("//", "/"), ("/backup/", "/backup"), ("~/backup", "~/backup")],
+    )
+    def test_path_normalized(self, raw: str, expected: str) -> None:
+        vol = RemoteVolume(slug="nas", ssh_endpoint="nas-server", path=raw)
+        assert vol.path == expected
+
+    def test_relative_path_rejected(self) -> None:
+        with pytest.raises(pydantic.ValidationError) as excinfo:
+            RemoteVolume(slug="nas", ssh_endpoint="nas-server", path="relative/dir")
+        assert {err["type"] for err in excinfo.value.errors()} == {
+            ConfigValidationErrorKind.RELATIVE_PATH,
+        }
 
 
 class TestSyncEndpoint:

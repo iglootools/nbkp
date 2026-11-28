@@ -1,15 +1,18 @@
 """Finding the config file on disk and loading it into a validated :class:`Config`."""
 
 import os
+import stat
 from collections.abc import Callable, Mapping
 from enum import StrEnum
 from pathlib import Path
+from typing import Any
 
 import yaml
 from platformdirs import site_config_dir, user_config_dir
 from pydantic import ValidationError
 
 from nbkp.config.protocol import Config
+from nbkp.config.xdg import resolve_xdg_dir
 
 _APP = "nbkp"
 _FILENAME = "config.yaml"
@@ -59,15 +62,57 @@ class ConfigError(Exception):
         )
 
 
-def _xdg_config_home(environ: Mapping[str, str], home: Path) -> Path:
-    """
-    Return ``$XDG_CONFIG_HOME`` when valid, else the default under *home*.
+class _DuplicateKeyError(yaml.constructor.ConstructorError):
+    """A key repeated within one YAML mapping, with the marks of both."""
 
-    The XDG spec says an empty or relative ``$XDG_CONFIG_HOME`` is invalid and must be
-    ignored: honouring it would search the working directory.
+    def __init__(self, mapping: yaml.MappingNode, key: yaml.ScalarNode) -> None:
+        """Point at the mapping and at the repeated key."""
+        super().__init__(
+            "while constructing a mapping",
+            mapping.start_mark,
+            f"found duplicate key {key.value!r}",
+            key.start_mark,
+        )
+
+
+class _UniqueKeyLoader(yaml.SafeLoader):
     """
-    xdg = Path(environ.get("XDG_CONFIG_HOME", ""))
-    return xdg if xdg.is_absolute() else home / ".config"
+    A ``SafeLoader`` that rejects a key repeated in one mapping.
+
+    PyYAML keeps only the last value of a repeated key, so a copy-pasted sync
+    whose key was not renamed, or a second ``syncs:`` block, would silently
+    replace the first and its backup would never run. Keys a ``<<`` merge
+    brings in may still be overridden, as YAML intends.
+    """
+
+    def construct_mapping(
+        self,
+        node: yaml.MappingNode,
+        deep: bool = False,  # noqa: FBT001, FBT002 -- PyYAML's signature
+    ) -> dict[Any, Any]:
+        """Raise ``ConstructorError`` on a repeated key, else build the mapping."""
+        scalar_keys = [
+            key_node
+            for key_node, _ in node.value
+            if isinstance(key_node, yaml.ScalarNode)
+            and key_node.tag != "tag:yaml.org,2002:merge"
+        ]
+        duplicate = next(
+            (
+                key_node
+                for i, key_node in enumerate(scalar_keys)
+                if any(
+                    (key_node.tag, key_node.value) == (earlier.tag, earlier.value)
+                    for earlier in scalar_keys[:i]
+                )
+            ),
+            None,
+        )
+        match duplicate:
+            case yaml.ScalarNode() as key_node:
+                raise _DuplicateKeyError(node, key_node)
+            case _:
+                return super().construct_mapping(node, deep=deep)
 
 
 def _config_search_paths(
@@ -86,11 +131,37 @@ def _config_search_paths(
     (for which user_config_dir(_APP) defaults to ~/Library/Application Support/nbkp).
     """
     candidates = [
-        _xdg_config_home(environ, home) / _APP / _FILENAME,
+        resolve_xdg_dir(environ, "XDG_CONFIG_HOME", home / ".config")
+        / _APP
+        / _FILENAME,
         Path(user_dir(_APP)) / _FILENAME,
         Path(site_dir(_APP)) / _FILENAME,
     ]
     return list(dict.fromkeys(candidates))
+
+
+def _is_config_file(path: Path) -> bool:
+    """
+    Return whether *path* is a regular file, raising when that cannot be told.
+
+    Only a path that does not exist is absent: ``Path.is_file`` also answers
+    False on a ``PermissionError``, which would report an unreadable config as
+    missing, or silently fall through to a lower-priority one.
+
+    Raises ``ConfigError(UNREADABLE)`` when the path cannot be stat'ed.
+    """
+    try:
+        mode = path.stat().st_mode
+    except FileNotFoundError, NotADirectoryError:
+        return False
+    except OSError as e:
+        raise ConfigError(
+            ConfigErrorKind.UNREADABLE,
+            path=path,
+            detail=e.strerror or str(e),
+        ) from e
+    else:
+        return stat.S_ISREG(mode)
 
 
 def find_config_file(
@@ -108,10 +179,14 @@ def find_config_file(
     The search reads *environ*, *home* (the user's home directory, by
     default the process's) and the platform directories, so a caller can
     keep it off the real ones.
+
+    Raises ``ConfigError``: ``FILE_NOT_FOUND`` or ``NO_CONFIG_FOUND`` when
+    no file exists, ``UNREADABLE`` when a candidate exists but cannot be
+    stat'ed (the search stops there rather than loading another config).
     """
     if config_path is not None:
         p = Path(config_path)
-        if not p.is_file():
+        if not _is_config_file(p):
             raise ConfigError(ConfigErrorKind.FILE_NOT_FOUND, path=config_path)
         else:
             return p
@@ -122,7 +197,7 @@ def find_config_file(
             user_dir,
             site_dir,
         )
-        found = next((p for p in search if p.is_file()), None)
+        found = next((p for p in search if _is_config_file(p)), None)
         if found is not None:
             return found
         else:
@@ -141,7 +216,8 @@ def load_config(
     Load and validate the config file.
 
     Raises ``ConfigError`` when the file is missing or unreadable, is not a YAML
-    mapping, or fails validation; ``kind`` says which.
+    mapping (a key repeated within one mapping counts as invalid YAML), or
+    fails validation; ``kind`` says which.
     """
     path = find_config_file(
         config_path,
@@ -152,7 +228,7 @@ def load_config(
     )
     try:
         with Path(path).open(encoding="utf-8") as f:
-            raw = yaml.safe_load(f)
+            raw = yaml.load(f, Loader=_UniqueKeyLoader)  # noqa: S506 -- a SafeLoader subclass
     except OSError as e:
         raise ConfigError(
             ConfigErrorKind.UNREADABLE,

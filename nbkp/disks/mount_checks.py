@@ -16,6 +16,7 @@ from nbkp.disks.detection import (
     detect_device_present,
     discover_cleartext_device,
     find_mountpoint,
+    findmnt_stdout,
 )
 from nbkp.disks.models import MountCapabilities, MountToolCapabilities
 from nbkp.disks.observation import MountObservation
@@ -116,23 +117,12 @@ def _check_fstab_entry(
         volume,
         resolved_endpoints,
     )
-    match result.returncode:
-        case 0:
-            return (
-                _parse_fstab_pairs(result.stdout.splitlines()[0])
-                if result.stdout.strip()
-                else None
-            )
-        case 1 if not result.stderr.strip():
-            # findmnt exits 1, silently, when nothing matches; it also exits 1
-            # on errors, but those print a message.
-            return None
-        case _:
-            raise DeviceProbeError(
-                command="findmnt",
-                returncode=result.returncode,
-                stderr=result.stderr.strip(),
-            )
+    stdout = findmnt_stdout(result)
+    return (
+        _parse_fstab_pairs(stdout.splitlines()[0])
+        if stdout is not None and stdout.strip()
+        else None
+    )
 
 
 def _parse_fstab_pairs(line: str) -> FstabEntry | None:
@@ -341,7 +331,9 @@ def check_mount_capabilities(
         cleartext_device=state.cleartext_device,
         effective_path=state.effective_path,
         mount_failure_reason=(
-            mount_observation.failure_reason if mount_observation is not None else None
+            mount_observation.mount_failure_reason
+            if mount_observation is not None
+            else None
         ),
     )
 
@@ -381,7 +373,7 @@ def _fstab_check(
 def check_mount_status(
     volume: Volume,
     mount: MountConfig,
-    resolved_endpoints: ResolvedEndpoints | None = None,
+    resolved_endpoints: ResolvedEndpoints,
     mount_tools: MountToolCapabilities | None = None,
     *,
     run: VolumeCommandRunner = run_on_volume,
@@ -398,6 +390,6 @@ def check_mount_status(
         volume,
         mount,
         mount_tools,
-        resolved_endpoints or {},
+        resolved_endpoints,
         run=run,
     )

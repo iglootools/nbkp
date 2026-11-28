@@ -15,6 +15,7 @@ from nbkp.cliwiring.options import (
     EXCLUDE_LOCATION_OPTION,
     LOCATION_OPTION,
     NETWORK_OPTION,
+    expand_user_path,
 )
 from nbkp.cliwiring.runtime import runtime_of
 from nbkp.sh import ScriptOptions, VolumeWithoutPathError, generate_script
@@ -31,7 +32,7 @@ def sh_cmd(
             help="Write script to file (made executable)",
             file_okay=True,
             dir_okay=False,
-            resolve_path=True,
+            callback=expand_user_path,
         ),
     ] = None,
     *,
@@ -98,7 +99,13 @@ def sh_cmd(
 
     runtime = runtime_of(ctx)
     cfg = load_config_or_exit(runtime, config)
-    resolved = resolve_endpoints(cfg, location, exclude_location, network)
+    resolved = resolve_endpoints(
+        cfg,
+        location,
+        exclude_location,
+        network,
+        ssh_config_path=runtime.ssh_config_path(),
+    )
     try:
         script = generate_script(
             cfg,
@@ -114,16 +121,26 @@ def sh_cmd(
             resolved_endpoints=resolved,
         )
     except VolumeWithoutPathError as e:
+        # A configuration error: the fix is to add `path` to the volume.
         typer.echo(_format_volume_without_path(e), err=True)
-        raise typer.Exit(1) from e
+        raise typer.Exit(2) from e
     if output_file is not None:
-        _write_script(output_file, script)
+        try:
+            write_script_file(output_file, script)
+        except OSError as e:
+            typer.echo(
+                f"Error: cannot write {display_path(output_file)}:"
+                f" {e.strerror or e}. Make its directory writable, or pick"
+                " another --output-file.",
+                err=True,
+            )
+            raise typer.Exit(1) from e
         typer.echo(f"Written to {display_path(output_file)}", err=True)
     else:
         typer.echo(script)
 
 
-def _write_script(path: Path, script: str) -> None:
+def write_script_file(path: Path, script: str) -> None:
     """
     Write *script* to *path*, executable, in one atomic step.
 

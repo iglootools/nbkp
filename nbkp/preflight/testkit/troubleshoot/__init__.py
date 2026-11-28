@@ -45,6 +45,7 @@ from nbkp.preflight.testkit.troubleshoot.reachability import (
     MISSING_SENTINELS,
     STANDALONE_ENDPOINTS,
     UNAVAILABLE_VOLUMES,
+    UNREADABLE_SENTINELS,
 )
 from nbkp.preflight.testkit.troubleshoot.scenario import (
     LAPTOP_SRC,
@@ -60,6 +61,7 @@ from nbkp.preflight.testkit.troubleshoot.snapshots import (
     FS_TYPE_UNKNOWN,
     HARDLINK_ISSUES,
     LATEST_SNAPSHOT_WRITABLE,
+    LATEST_UNREADABLE,
     SOURCE_LATEST_MISSING,
     SRC_DEVNULL_NO_UPSTREAM,
     SRC_LATEST_INVALID,
@@ -71,6 +73,7 @@ SCENARIOS: tuple[Scenario, ...] = (
     DISABLED_SYNC,
     UNAVAILABLE_VOLUMES,
     MISSING_SENTINELS,
+    UNREADABLE_SENTINELS,
     RSYNC_MISSING,
     BTRFS_NOT_DETECTED,
     BTRFS_MOUNT_ISSUES,
@@ -94,6 +97,7 @@ SCENARIOS: tuple[Scenario, ...] = (
     DST_LATEST_MISSING,
     DST_LATEST_INVALID,
     SRC_LATEST_INVALID,
+    LATEST_UNREADABLE,
     SRC_DEVNULL_NO_UPSTREAM,
     HOST_TOOL_ERRORS,
     MOUNT_NO_PASSPHRASE,

@@ -89,8 +89,7 @@ fi
 # over the system D-Bus and is authorized by polkitd.  This image has no
 # systemd, so start the three daemons directly.  Best-effort: guarded with
 # `|| true` so a container without /dev/disk access still boots for the
-# non-mount tests.  NOTE: needs real-Docker validation (privileged + loop
-# devices); see tests/_docker_fixtures and tests/integration_docker/test_disks.py.
+# non-mount tests.
 mkdir -p /run/dbus
 dbus-daemon --system --fork 2>/dev/null || true
 # udev must run *before* udisksd so udisks can enumerate block devices over
@@ -117,9 +116,9 @@ if [ -f /srv/luks-uuid ]; then
     /wait-for-udisks.sh "/dev/disk/by-uuid/$(cat /srv/luks-uuid)"
 fi
 
-# Generate SSH host keys if not present
 ssh-keygen -A
 
-# Start sshd in foreground
+# The test fixtures wait for this line in the container log (testcontainers'
+# LogMessageWaitStrategy) before they connect.
 echo "Server listening"
 exec /usr/sbin/sshd -D -e

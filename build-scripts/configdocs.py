@@ -20,10 +20,12 @@ Why hand-rolled instead of a library?
     fundamentally changes.
 """
 
+import builtins
 import sys
+import types
+import typing
 from pathlib import Path
-from types import UnionType
-from typing import Annotated, Literal, TypeIs, get_args, get_origin
+from typing import Annotated, Any, TypeIs, get_args, get_origin
 
 import typer
 from pydantic import BaseModel
@@ -59,13 +61,17 @@ def _end_marker(name: str) -> str:
 
 def _marker_problem(file_content: str, begin: str, end: str) -> str | None:
     """Say what is wrong with a section's markers, or None when they are usable."""
-    if begin not in file_content or end not in file_content:
-        return "not found"
-    if file_content.count(begin) > 1 or file_content.count(end) > 1:
-        return "repeated"
-    if file_content.find(end) < file_content.find(begin):
-        return "out of order (END before BEGIN)"
-    return None
+    match (file_content.count(begin), file_content.count(end)):
+        case (0, _) | (_, 0):
+            return "not found"
+        case (1, 1):
+            return (
+                "out of order (END before BEGIN)"
+                if file_content.find(end) < file_content.find(begin)
+                else None
+            )
+        case _:
+            return "repeated"
 
 
 def splice_section(file_content: str, name: str, body: str) -> str:
@@ -147,7 +153,7 @@ Top-level config fields for credential retrieval:
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `credential-provider` | `"keyring"` \\| `"prompt"` \\| `"env"` \\| `"command"` | `"keyring"` | How LUKS passphrases are retrieved |
-| `credential-command` | list of strings | `null` | Command template for `command` provider. Must contain `{id}` placeholder (e.g. `["pass", "show", "nbkp/{id}"]`) |
+| `credential-command` | list of strings | `null` | Command template for `command` provider. Must contain `{id}` placeholder (e.g. `["pass", "show", "nbkp/{id}"]`). A leading `~` in the program (the first item) is expanded |
 
 Providers:
 - **keyring**: `keyring.get_password("nbkp", passphrase_id)` — uses macOS Keychain or
@@ -179,7 +185,11 @@ Default rsync flags (when `default-options-override` is not set):
 
 ```
 -a --delete --delete-excluded --partial-dir=.rsync-partial --safe-links
-```"""
+```
+
+The sentinel filters `--filter=H .nbkp-*` and `--filter=P .nbkp-*` follow them
+in every sync, with or without `default-options-override`: they keep rsync from
+copying the source's sentinels or deleting the destination's."""
 
 _FILTERS_SECTION = """\
 #### Filters
@@ -268,81 +278,83 @@ def _is_model_class(annotation: object) -> TypeIs[type[BaseModel]]:
     return isinstance(annotation, type) and issubclass(annotation, BaseModel)
 
 
+_SCALAR_TYPES: dict[object, str] = {
+    str: "string",
+    int: "integer",
+    float: "float",
+    bool: "boolean",
+}
+
+
+def _keeping_constraints(info: FieldInfo, annotation: type[Any] | None) -> FieldInfo:
+    """Return *info* narrowed to *annotation*, with its constraints kept."""
+    inner = FieldInfo(annotation=annotation)
+    inner.metadata = info.metadata
+    return inner
+
+
 def _type_str(info: FieldInfo) -> str:
     annotation = info.annotation
-    if annotation is None:
-        return "any"
-
-    origin = get_origin(annotation)
     args = get_args(annotation)
+    # Since 3.14, typing.Union is types.UnionType, so X | None also covers
+    # Optional[X] and Union[...]: it shows as X, with X's constraints.
+    non_none = [a for a in args if a is not type(None)]
+    match (annotation, get_origin(annotation)):
+        case (None, _):
+            return "any"
+        case (_, typing.Annotated):
+            return _type_str(_keeping_constraints(info, args[0]))
+        case (_, types.UnionType) if len(non_none) == 1:
+            return _type_str(_keeping_constraints(info, non_none[0]))
+        case (_, typing.Literal):
+            return " \\| ".join(f'`"{a}"`' for a in args)
+        case (_, builtins.list):
+            return (
+                f"list of {_type_str(FieldInfo(annotation=args[0]))}s"
+                if args
+                else "list"
+            )
+        case (_, builtins.dict):
+            return "object"
+        case _ if _is_model_class(annotation):
+            return "object"
+        case _ if annotation in _SCALAR_TYPES:
+            return _SCALAR_TYPES[annotation] + _constraints_str(info)
+        case _:
+            return str(annotation)
 
-    if origin is Annotated:
-        inner_info = FieldInfo(annotation=args[0])
-        inner_info.metadata = info.metadata
-        return _type_str(inner_info)
 
-    # X | None → show the inner type with original constraints. Since 3.14,
-    # typing.Union is types.UnionType, so this also covers Optional[X] and Union[...].
-    if origin is UnionType:
-        non_none = [a for a in args if a is not type(None)]
-        if len(non_none) == 1:
-            # Pass original info to preserve constraints
-            inner_info = FieldInfo(annotation=non_none[0])
-            inner_info.metadata = info.metadata
-            return _type_str(inner_info)
-
-    if origin is Literal:
-        return " \\| ".join(f'`"{a}"`' for a in args)
-
-    if origin is list:
-        if args:
-            inner_info = FieldInfo(annotation=args[0])
-            return f"list of {_type_str(inner_info)}s"
-        return "list"
-
-    if origin is dict:
-        return "object"
-
-    if _is_model_class(annotation):
-        return "object"
-
-    type_map: dict[object, str] = {
-        str: "string",
-        int: "integer",
-        float: "float",
-        bool: "boolean",
-    }
-    if annotation in type_map:
-        return type_map[annotation] + _constraints_str(info)
-
-    return str(annotation)
+def _factory_default_str(info: FieldInfo) -> str:
+    factory_result = info.get_default(call_default_factory=True)
+    match factory_result:
+        case BaseModel():
+            return "see below"
+        case _ if _is_empty_list(factory_result):
+            return "`[]`"
+        case _:
+            return str(factory_result)
 
 
 def _default_str(info: FieldInfo) -> str:
-    if info.is_required():
-        return "**required**"
-
     default = info.default
-    if default is None:
-        return "`null`"
-    if isinstance(default, bool):
-        return f"`{str(default).lower()}`"
-    if isinstance(default, (int, float)):
-        return f"`{default}`"
-    if isinstance(default, str):
-        return f'`"{default}"`'
-    if _is_empty_list(default):
-        return "`[]`"
-
-    if info.default_factory is not None:
-        factory_result = info.get_default(call_default_factory=True)
-        if isinstance(factory_result, BaseModel):
-            return "see below"
-        if _is_empty_list(factory_result):
+    # bool before int: a bool is an int, and renders as true/false.
+    match default:
+        case _ if info.is_required():
+            return "**required**"
+        case None:
+            return "`null`"
+        case bool():
+            return f"`{str(default).lower()}`"
+        case int() | float():
+            return f"`{default}`"
+        case str():
+            return f'`"{default}"`'
+        case _ if _is_empty_list(default):
             return "`[]`"
-        return str(factory_result)
-
-    return str(default)
+        case _ if info.default_factory is not None:
+            return _factory_default_str(info)
+        case _:
+            return str(default)
 
 
 def table_cell(text: str) -> str:
@@ -382,103 +394,93 @@ def generate_table(model: type[BaseModel]) -> str:
     )
 
 
+def _blocks(*parts: str) -> str:
+    """Join Markdown blocks with a blank line between each."""
+    return "\n\n".join(parts)
+
+
+def _section(*parts: str) -> str:
+    """Return a marker-delimited section's body: its blocks, ending with a newline."""
+    return _blocks(*parts) + "\n"
+
+
+def _table_section(heading: str, model: type[BaseModel], *notes: str) -> str:
+    return _blocks(f"#### {heading}", generate_table(model), *notes)
+
+
+def _ssh_endpoints_section() -> str:
+    return _section(
+        _table_section(
+            "`ssh-endpoints.<slug>` — SSH Endpoint",
+            SshEndpoint,
+            _SSH_ENDPOINT_NOTES,
+        ),
+        "---",
+        _table_section(
+            "`connection-options` — SSH Connection Options",
+            SshConnectionOptions,
+        ),
+    )
+
+
+def _volumes_section() -> str:
+    return _section(
+        _table_section(
+            "`volumes.<slug>` — Local Volume",
+            LocalVolume,
+            _LOCAL_VOLUME_NOTES,
+        ),
+        _table_section("`volumes.<slug>` — Remote Volume", RemoteVolume),
+        "---",
+        _table_section("`mount` — Mount Config", MountConfig, _MOUNT_CONFIG_NOTES),
+        _table_section(
+            "`encryption` — LUKS Encryption Config",
+            LuksEncryptionConfig,
+            _LUKS_ENCRYPTION_NOTES,
+        ),
+        "---",
+        _CREDENTIAL_PROVIDER_NOTES,
+    )
+
+
+def _sync_endpoints_section() -> str:
+    return _section(
+        _table_section(
+            "`sync-endpoints.<slug>` — Sync Endpoint",
+            SyncEndpoint,
+            _SYNC_ENDPOINT_NOTES,
+        ),
+        "---",
+        _table_section(
+            "`btrfs-snapshots` / `hard-link-snapshots`",
+            BtrfsSnapshotConfig,
+        ),
+    )
+
+
+def _syncs_section() -> str:
+    return _section(
+        _table_section("`syncs.<slug>` — Sync Config", SyncConfig, _SYNC_CONFIG_NOTES),
+        "---",
+        _table_section(
+            "`rsync-options` — Rsync Options",
+            RsyncOptions,
+            _RSYNC_OPTIONS_NOTES,
+        ),
+        "---",
+        _FILTERS_SECTION,
+    )
+
+
 def _generate_sections() -> dict[str, str]:
     """Generate all marker-delimited sections as a dict of {name: body}."""
-    sections: dict[str, str] = {}
-
-    sections["CONFIGREF:TOP_LEVEL"] = f"{_TOP_LEVEL_STRUCTURE}\n"
-
-    sections["CONFIGREF:SSH_ENDPOINTS"] = "\n".join(
-        [
-            "#### `ssh-endpoints.<slug>` — SSH Endpoint",
-            "",
-            generate_table(SshEndpoint),
-            "",
-            _SSH_ENDPOINT_NOTES,
-            "",
-            "---",
-            "",
-            "#### `connection-options` — SSH Connection Options",
-            "",
-            generate_table(SshConnectionOptions),
-            "",
-        ],
-    )
-
-    sections["CONFIGREF:VOLUMES"] = "\n".join(
-        [
-            "#### `volumes.<slug>` — Local Volume",
-            "",
-            generate_table(LocalVolume),
-            "",
-            _LOCAL_VOLUME_NOTES,
-            "",
-            "#### `volumes.<slug>` — Remote Volume",
-            "",
-            generate_table(RemoteVolume),
-            "",
-            "---",
-            "",
-            "#### `mount` — Mount Config",
-            "",
-            generate_table(MountConfig),
-            "",
-            _MOUNT_CONFIG_NOTES,
-            "",
-            "#### `encryption` — LUKS Encryption Config",
-            "",
-            generate_table(LuksEncryptionConfig),
-            "",
-            _LUKS_ENCRYPTION_NOTES,
-            "",
-            "---",
-            "",
-            _CREDENTIAL_PROVIDER_NOTES,
-            "",
-        ],
-    )
-
-    sections["CONFIGREF:SYNC_ENDPOINTS"] = "\n".join(
-        [
-            "#### `sync-endpoints.<slug>` — Sync Endpoint",
-            "",
-            generate_table(SyncEndpoint),
-            "",
-            _SYNC_ENDPOINT_NOTES,
-            "",
-            "---",
-            "",
-            "#### `btrfs-snapshots` / `hard-link-snapshots`",
-            "",
-            generate_table(BtrfsSnapshotConfig),
-            "",
-        ],
-    )
-
-    sections["CONFIGREF:SYNCS"] = "\n".join(
-        [
-            "#### `syncs.<slug>` — Sync Config",
-            "",
-            generate_table(SyncConfig),
-            "",
-            _SYNC_CONFIG_NOTES,
-            "",
-            "---",
-            "",
-            "#### `rsync-options` — Rsync Options",
-            "",
-            generate_table(RsyncOptions),
-            "",
-            _RSYNC_OPTIONS_NOTES,
-            "",
-            "---",
-            "",
-            _FILTERS_SECTION,
-            "",
-        ],
-    )
-
-    return sections
+    return {
+        "CONFIGREF:TOP_LEVEL": f"{_TOP_LEVEL_STRUCTURE}\n",
+        "CONFIGREF:SSH_ENDPOINTS": _ssh_endpoints_section(),
+        "CONFIGREF:VOLUMES": _volumes_section(),
+        "CONFIGREF:SYNC_ENDPOINTS": _sync_endpoints_section(),
+        "CONFIGREF:SYNCS": _syncs_section(),
+    }
 
 
 app = typer.Typer(add_completion=False)

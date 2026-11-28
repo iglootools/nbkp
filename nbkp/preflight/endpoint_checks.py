@@ -20,11 +20,11 @@ from nbkp.fsprotocol import (
     Snapshot,
 )
 from nbkp.preflight.probes import (
+    VolumeReadError,
     check_directory_exists,
     check_directory_writable,
     check_endpoint_sentinel,
-    check_symlink_exists,
-    read_symlink_target,
+    read_symlink,
 )
 from nbkp.preflight.snapshot_checks import check_btrfs_subvolume, probe_btrfs_readonly
 from nbkp.preflight.status.endpoint import (
@@ -51,15 +51,23 @@ def observe_source_endpoint(
     Return what the source endpoint's directory holds.
 
     Looks for the source sentinel, and, when the endpoint has snapshots, its snapshot
-    directories and ``latest`` symlink.
+    directories and ``latest`` symlink. When the sentinel's presence cannot be told,
+    nothing else is probed: the rest of the directory would be as unreadable.
     """
-    sentinel_exists = check_endpoint_sentinel(
-        volume,
-        endpoint.subdir,
-        SOURCE_SENTINEL,
-        resolved_endpoints,
-        run=run,
-    )
+    try:
+        sentinel_exists = check_endpoint_sentinel(
+            volume,
+            endpoint.subdir,
+            SOURCE_SENTINEL,
+            resolved_endpoints,
+            run=run,
+        )
+    except VolumeReadError as e:
+        return SourceEndpointDiagnostics(
+            endpoint_slug=endpoint.slug,
+            sentinel_exists=False,
+            sentinel_unreadable=e.detail,
+        )
     src_ep = resolve_endpoint_path(volume, endpoint.subdir)
     has_snapshots = endpoint.snapshot_mode != "none"
 
@@ -94,15 +102,24 @@ def observe_destination_endpoint(
     Looks for the destination sentinel and whether the directory is writable, and,
     per snapshot mode, the btrfs staging subvolume, snapshot directories, ``latest``
     symlink and whether the latest btrfs snapshot is read-only. *capabilities* and
-    *host_tools* skip the probes the volume or its host cannot answer.
+    *host_tools* skip the probes the volume or its host cannot answer. When the
+    sentinel's presence cannot be told, nothing else is probed.
     """
-    sentinel_exists = check_endpoint_sentinel(
-        volume,
-        endpoint.subdir,
-        DESTINATION_SENTINEL,
-        resolved_endpoints,
-        run=run,
-    )
+    try:
+        sentinel_exists = check_endpoint_sentinel(
+            volume,
+            endpoint.subdir,
+            DESTINATION_SENTINEL,
+            resolved_endpoints,
+            run=run,
+        )
+    except VolumeReadError as e:
+        return DestinationEndpointDiagnostics(
+            endpoint_slug=endpoint.slug,
+            sentinel_exists=False,
+            sentinel_unreadable=e.detail,
+            endpoint_writable=False,
+        )
     dst_ep = resolve_endpoint_path(volume, endpoint.subdir)
     latest = (
         _read_latest_state(volume, dst_ep, resolved_endpoints, run=run)
@@ -217,11 +234,13 @@ def _read_latest_state(
     *,
     run: VolumeCommandRunner,
 ) -> LatestSymlinkState:
+    # read_symlink alone tells absent from present: on a remote volume that
+    # is one ``readlink`` round-trip, two only when it fails.
     latest_path = f"{endpoint_path}/{LATEST_LINK}"
-    if not check_symlink_exists(volume, latest_path, resolved_endpoints, run=run):
-        return LatestSymlinkState(exists=False)
-
-    raw_target = read_symlink_target(volume, latest_path, resolved_endpoints, run=run)
+    try:
+        raw_target = read_symlink(volume, latest_path, resolved_endpoints, run=run)
+    except VolumeReadError as e:
+        return LatestSymlinkState(exists=True, unreadable=e.detail or "cannot read")
     match raw_target:
         case None:
             return LatestSymlinkState(exists=False)

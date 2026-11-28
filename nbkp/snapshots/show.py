@@ -84,14 +84,14 @@ def _process_candidate(
 def show_all_syncs(
     config: Config,
     sync_statuses: dict[str, SyncStatus],
-    only_syncs: list[str] | None = None,
-    resolved_endpoints: ResolvedEndpoints | None = None,
-    strictness: Strictness = Strictness.IGNORE_INACTIVE,
     *,
+    resolved_endpoints: ResolvedEndpoints,
+    only_syncs: list[str] | None = None,
+    strictness: Strictness = Strictness.IGNORE_INACTIVE,
     run: VolumeCommandRunner = run_on_volume,
 ) -> list[ShowResult]:
     """Snapshots of each selected sync's destination, read through *run*."""
-    resolved = resolved_endpoints or {}
+    resolved = resolved_endpoints
     return [
         _process_candidate(slug, status, config, resolved, strictness, run=run)
         for slug, status in sync_statuses.items()
