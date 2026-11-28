@@ -232,9 +232,14 @@ set, inline filters are applied first."""
 # Fields auto-injected by validators, not part of the user-facing config
 _HIDDEN_FIELDS = {"slug"}
 
-# Discriminator fields that should show as **required** with a description
-_DISCRIMINATOR_OVERRIDES: dict[str, tuple[str, str]] = {
-    "type": ("**required**", "Volume type discriminator"),
+# The volume union's discriminator: required in the YAML although each model
+# gives it a default, since pydantic picks the model from it. Keyed by model as
+# well as field, so another model's `type` (the encryption backend) keeps its
+# own default and description.
+_VOLUME_DISCRIMINATOR = ("**required**", "Volume type discriminator")
+_DISCRIMINATOR_OVERRIDES: dict[tuple[type[BaseModel], str], tuple[str, str]] = {
+    (LocalVolume, "type"): _VOLUME_DISCRIMINATOR,
+    (RemoteVolume, "type"): _VOLUME_DISCRIMINATOR,
 }
 
 
@@ -350,9 +355,9 @@ def table_cell(text: str) -> str:
     return text.replace("|", "\\|")
 
 
-def _table_row(name: str, info: FieldInfo) -> str:
-    """Return the row documenting the field *name*, under its config key."""
-    default, description = _DISCRIMINATOR_OVERRIDES.get(name) or (
+def _table_row(model: type[BaseModel], name: str, info: FieldInfo) -> str:
+    """Return the row documenting *model*'s field *name*, under its config key."""
+    default, description = _DISCRIMINATOR_OVERRIDES.get((model, name)) or (
         _default_str(info),
         info.description or "",
     )
@@ -369,7 +374,7 @@ def generate_table(model: type[BaseModel]) -> str:
             "| Field | Type | Default | Description |",
             "|---|---|---|---|",
             *(
-                _table_row(name, info)
+                _table_row(model, name, info)
                 for name, info in model.model_fields.items()
                 if name not in _HIDDEN_FIELDS
             ),

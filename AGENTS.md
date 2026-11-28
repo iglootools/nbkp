@@ -17,8 +17,8 @@ uv, Typer; tasks run through mise.
   `mise exec -- <tool>` for one mise installs
   ([why](https://github.com/iglootools/common/blob/main/guidelines/project-setup/python-tooling.md#invoke-tools-through-uv-run---no-sync-tool-in-mise-tasks-not-bare)).
 - `mise run reference-doc` regenerates the generated references (the CLI
-  reference, the config tables and the Module Overview), and `mise run toc` the
-  tables of contents.
+  reference, the config tables, the Module Overview and the task reference), and
+  `mise run toc` the tables of contents.
 
 ## Guidelines
 

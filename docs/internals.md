@@ -609,7 +609,14 @@ Checks include:
   host's errors cascade to its volumes (`SSH_ENDPOINT_INACTIVE`), while the
   orchestrator's own errors — localhost is always "reachable" — mark every sync
   with a side on it `ENDPOINT_HOST_ERRORS`, so a missing local rsync fails
-  preflight instead of failing every sync at run time.
+  preflight instead of failing every sync at run time. Which tools a host must
+  have is computed once per host, from every selected sync with an endpoint on
+  it: one btrfs-snapshot endpoint makes `btrfs` and `findmnt` required for the
+  whole host, so a host missing them fails its plain and hard-link syncs too.
+  This is deliberate. Tool presence is a property of the host, probed once,
+  and a host that cannot serve one of its configured syncs is a setup error to
+  fix rather than a partial success to report. `--sync` narrows the selection,
+  and with it the requirement, to the syncs given.
 - **Btrfs readiness** — Correct filesystem type, subvolume existence, mount
   options, required directories
 - **Hard-link readiness** — Filesystem hard-link support, required directory
@@ -930,13 +937,14 @@ every generated script.
 
 ### Outputs
 
-All commands support both human-readable output (Rich-formatted tables,
-spinners, progress bars) and machine-readable JSON output for scripting and
-automation. The `run` command additionally supports four progress display modes:
-`none`, `overall`, `per-file`, and `full`. In human output with any of them but
-`none`, rsync's output is shown as it streams. Shown or not, a sync's result
-keeps only the last 65,536 characters of it, stdout and stderr merged: the whole
-of it can run to hundreds of megabytes over millions of files (JSON output with
+Commands print human-readable output (Rich-formatted tables, spinners, progress
+bars), and JSON for scripting on every command but those
+[features.md › Outputs](features.md#outputs) lists. The `run` command
+additionally supports four progress display modes: `none`, `overall`,
+`per-file`, and `full`. In human output with any of them but `none`, rsync's
+output is shown as it streams. Shown or not, a sync's result keeps only the last
+65,536 characters of it, stdout and stderr merged: the whole of it can run to
+hundreds of megabytes over millions of files (JSON output with
 `--progress per-file` included), and rsync's error, when it fails, comes last.
 
 ### Rsync Defaults

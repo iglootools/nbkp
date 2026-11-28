@@ -61,7 +61,10 @@ incremental history with automatic pruning.
   snapshot with `latest` symlink
 - **Hard-link snapshots**: rsync with `--link-dest` for space-efficient
   incremental snapshots on any filesystem supporting hard links (ext4, xfs,
-  btrfs, etc.)
+  btrfs, etc.). On a remote host, the filesystem type is read with GNU
+  `stat -f`: a remote macOS host's BSD `stat` cannot answer, so snapshot
+  destinations there are reported as `vol-fs-type-unknown` (local macOS
+  volumes are probed with `df` and `mount` instead)
 - **Automatic pruning**: configurable `max-snapshots` limit, pruned after each
   run
 - **Safety**: `latest` symlink only updated after successful sync; orphaned
@@ -252,5 +255,5 @@ preview all output formats without a real backup config.
 
 ## Supported Commands
 
-See [Usage](./usage.md) for detailed command descriptions and examples. Every
-command and its options are listed in the [CLI Reference](cli-reference.md).
+Look up every command and its options in the [CLI Reference](cli-reference.md),
+and follow the worked examples by task in [Usage](./usage.md).

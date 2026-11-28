@@ -37,6 +37,10 @@ class ConnectionPool:
 
     Thread-safe: a lock guards the table, and is held while a missing
     connection is opened so that two threads never open the same one twice.
+    The cost is that opening one connection (a handshake and an authentication
+    per proxy hop) blocks every other thread, to any host. That costs nothing
+    while nbkp runs its remote commands from one thread, as it does; a caller
+    that runs them from several needs a lock per key instead.
     """
 
     def __init__(self) -> None:

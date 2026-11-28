@@ -41,7 +41,7 @@ $ nbkp run [OPTIONS]
 
 **Options**:
 
-* `-c, --config <file>`: Path to config file
+* `-c, --config <file>`: Path to config file. Default: the first config.yaml found in $XDG_CONFIG_HOME/nbkp (~/.config/nbkp), then the platform&#x27;s user and site config directories for nbkp
 * `-n, --dry-run`: Perform a dry run
 * `-s, --sync <str>`: Sync name(s) to include
 * `-o, --output <human|json>`: Output format  [default: human]
@@ -73,7 +73,7 @@ $ nbkp sh [OPTIONS]
 
 **Options**:
 
-* `-c, --config <file>`: Path to config file
+* `-c, --config <file>`: Path to config file. Default: the first config.yaml found in $XDG_CONFIG_HOME/nbkp (~/.config/nbkp), then the platform&#x27;s user and site config directories for nbkp
 * `-o, --output-file <file>`: Write script to file (made executable)
 * `--relative-src`: Make source paths relative to script location (requires --output-file)
 * `--relative-dst`: Make destination paths relative to script location (requires --output-file)
@@ -117,7 +117,7 @@ $ nbkp config show [OPTIONS]
 
 **Options**:
 
-* `-c, --config <file>`: Path to config file
+* `-c, --config <file>`: Path to config file. Default: the first config.yaml found in $XDG_CONFIG_HOME/nbkp (~/.config/nbkp), then the platform&#x27;s user and site config directories for nbkp
 * `-o, --output <human|json>`: Output format  [default: human]
 * `--help`: Show this message and exit.
 
@@ -154,7 +154,7 @@ $ nbkp credentials keyring-status [OPTIONS]
 
 **Options**:
 
-* `-c, --config <file>`: Path to config file
+* `-c, --config <file>`: Path to config file. Default: the first config.yaml found in $XDG_CONFIG_HOME/nbkp (~/.config/nbkp), then the platform&#x27;s user and site config directories for nbkp
 * `-o, --output <human|json>`: Output format  [default: human]
 * `--help`: Show this message and exit.
 
@@ -193,7 +193,7 @@ $ nbkp disks mount [OPTIONS]
 
 **Options**:
 
-* `-c, --config <file>`: Path to config file
+* `-c, --config <file>`: Path to config file. Default: the first config.yaml found in $XDG_CONFIG_HOME/nbkp (~/.config/nbkp), then the platform&#x27;s user and site config directories for nbkp
 * `-o, --output <human|json>`: Output format  [default: human]
 * `-n, --name <str>`: Volume name(s) to include
 * `-l, --location <str>`: Prefer endpoints at these locations
@@ -216,7 +216,7 @@ $ nbkp disks umount [OPTIONS]
 
 **Options**:
 
-* `-c, --config <file>`: Path to config file
+* `-c, --config <file>`: Path to config file. Default: the first config.yaml found in $XDG_CONFIG_HOME/nbkp (~/.config/nbkp), then the platform&#x27;s user and site config directories for nbkp
 * `-o, --output <human|json>`: Output format  [default: human]
 * `-n, --name <str>`: Volume name(s) to include
 * `-l, --location <str>`: Prefer endpoints at these locations
@@ -237,7 +237,7 @@ $ nbkp disks status [OPTIONS]
 
 **Options**:
 
-* `-c, --config <file>`: Path to config file
+* `-c, --config <file>`: Path to config file. Default: the first config.yaml found in $XDG_CONFIG_HOME/nbkp (~/.config/nbkp), then the platform&#x27;s user and site config directories for nbkp
 * `-o, --output <human|json>`: Output format  [default: human]
 * `-n, --name <str>`: Volume name(s) to include
 * `-l, --location <str>`: Prefer endpoints at these locations
@@ -257,7 +257,7 @@ $ nbkp disks setup-auth [OPTIONS]
 
 **Options**:
 
-* `-c, --config <file>`: Path to config file
+* `-c, --config <file>`: Path to config file. Default: the first config.yaml found in $XDG_CONFIG_HOME/nbkp (~/.config/nbkp), then the platform&#x27;s user and site config directories for nbkp
 * `-u, --user <str>`: System user the rule authorizes: the user nbkp runs as on the host (the SSH user for remote volumes). Defaults to the current user.
 * `-o, --output <human|json>`: Output format  [default: human]
 * `--help`: Show this message and exit.
@@ -292,7 +292,7 @@ $ nbkp ordering graph [OPTIONS]
 
 **Options**:
 
-* `-c, --config <file>`: Path to config file
+* `-c, --config <file>`: Path to config file. Default: the first config.yaml found in $XDG_CONFIG_HOME/nbkp (~/.config/nbkp), then the platform&#x27;s user and site config directories for nbkp
 * `-o, --output <human|json>`: Output format  [default: human]
 * `-f, --format <rich-tree|mermaid-ascii|mermaid>`: Graph format (human output only)  [default: rich-tree]
 * `--help`: Show this message and exit.
@@ -331,7 +331,7 @@ $ nbkp preflight check [OPTIONS]
 
 **Options**:
 
-* `-c, --config <file>`: Path to config file
+* `-c, --config <file>`: Path to config file. Default: the first config.yaml found in $XDG_CONFIG_HOME/nbkp (~/.config/nbkp), then the platform&#x27;s user and site config directories for nbkp
 * `-o, --output <human|json>`: Output format  [default: human]
 * `-S, --strictness <ignore-none|ignore-inactive|ignore-all>`: Which sync problems make the command exit non-zero: ignore-none (any), ignore-inactive (all but expected-inactive, default), ignore-all (none). Problems on SSH endpoints or volumes no sync uses are shown but never fatal  [default: ignore-inactive]
 * `-l, --location <str>`: Prefer endpoints at these locations
@@ -355,7 +355,7 @@ $ nbkp preflight troubleshoot [OPTIONS]
 
 **Options**:
 
-* `-c, --config <file>`: Path to config file
+* `-c, --config <file>`: Path to config file. Default: the first config.yaml found in $XDG_CONFIG_HOME/nbkp (~/.config/nbkp), then the platform&#x27;s user and site config directories for nbkp
 * `-o, --output <human|json>`: Output format  [default: human]
 * `-S, --strictness <ignore-none|ignore-inactive|ignore-all>`: Which sync problems make the command exit non-zero: ignore-none (any), ignore-inactive (all but expected-inactive, default), ignore-all (none). Problems on SSH endpoints or volumes no sync uses are shown but never fatal  [default: ignore-inactive]
 * `-l, --location <str>`: Prefer endpoints at these locations
@@ -398,7 +398,7 @@ $ nbkp snapshots prune [OPTIONS]
 
 **Options**:
 
-* `-c, --config <file>`: Path to config file
+* `-c, --config <file>`: Path to config file. Default: the first config.yaml found in $XDG_CONFIG_HOME/nbkp (~/.config/nbkp), then the platform&#x27;s user and site config directories for nbkp
 * `-s, --sync <str>`: Sync name(s) to include
 * `-n, --dry-run`: Perform a dry run
 * `-o, --output <human|json>`: Output format  [default: human]
@@ -422,7 +422,7 @@ $ nbkp snapshots show [OPTIONS]
 
 **Options**:
 
-* `-c, --config <file>`: Path to config file
+* `-c, --config <file>`: Path to config file. Default: the first config.yaml found in $XDG_CONFIG_HOME/nbkp (~/.config/nbkp), then the platform&#x27;s user and site config directories for nbkp
 * `-s, --sync <str>`: Sync name(s) to include
 * `-o, --output <human|json>`: Output format  [default: human]
 * `-S, --strictness <ignore-none|ignore-inactive|ignore-all>`: How to handle preflight errors: ignore-none (inactive syncs fail), ignore-inactive (skip expected-inactive, default), ignore-all (skip syncs with preflight errors)  [default: ignore-inactive]

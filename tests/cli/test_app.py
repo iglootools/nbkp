@@ -51,3 +51,10 @@ def test_version_short_flag() -> None:
 
     assert result.exit_code == 0, result.output
     assert result.output == f"{importlib.metadata.version('nbkp')}\n"
+
+
+def test_config_help_names_where_the_config_is_searched() -> None:
+    result = CliRunner().invoke(app, ["run", "--help"], env={"COLUMNS": "200"})
+
+    assert result.exit_code == 0, result.output
+    assert "$XDG_CONFIG_HOME/nbkp" in result.output

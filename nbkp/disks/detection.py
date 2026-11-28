@@ -49,8 +49,10 @@ def settle_udev(
     is there. Settling first closes that window, and costs nothing when the queue
     is already empty, as it is for a drive that is genuinely absent.
 
-    Never fails: without ``udevadm``, or when it times out or is refused, the
-    caller's own checks still run and report what they find.
+    A missing ``udevadm``, a timeout or a refusal is ignored: the caller's own
+    checks still run and report what they find. An SSH failure that is not an
+    ``OSError`` (a protocol error, a connection lost mid-command) propagates, for
+    the caller to report the host as unreachable.
     """
     with contextlib.suppress(OSError):
         run(

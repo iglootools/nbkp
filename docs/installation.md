@@ -1,5 +1,9 @@
 # Installation
 
+For users installing nbkp: the system requirements, the install command, the
+optional extras and shell completion. Then follow [Usage](usage.md) to write a
+first config and run it.
+
 <!-- toc -->
 **On this page**
 

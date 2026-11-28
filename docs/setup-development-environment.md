@@ -1,5 +1,10 @@
 # Setup Development Environment
 
+For contributors getting nbkp running from a clone: the toolchain, Docker, and
+the editor and Claude Code setup. Then follow
+[Building and Testing](building-and-testing.md) for the tasks and test suites,
+and [CONTRIBUTING.md](../CONTRIBUTING.md) for every other contributor document.
+
 ## System Setup
 
 1. [Install and activate mise](https://mise.jdx.dev/installing-mise.html)

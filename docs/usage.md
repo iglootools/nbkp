@@ -1,5 +1,11 @@
 # Usage
 
+For users setting up and running backups who want worked examples by task:
+installing, a first config, scheduled runs and the common commands. Look up
+every command in the [CLI Reference](cli-reference.md) and every config field in
+the [Configuration Reference](config-reference.md); learn the whole setup end to
+end in the [Tutorial](tutorial.md).
+
 <!-- toc -->
 **On this page**
 

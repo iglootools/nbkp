@@ -3,14 +3,14 @@
 #
 # This script runs nbkp commands against a deterministic
 # seed directory. It is designed to be executed inside
-# an asciinema recording session:
+# an asciinema recording session, which this records after
+# checking every requirement (demo/preflight.sh):
 #
-#   asciinema rec --command ./demo/demo.sh demo/demo.cast
-#   agg demo/demo.cast demo/demo.gif
+#   mise run demo-record
 #
 # Requirements:
 #   uv tool install nbkp  # or: mise run install (dev)
-#   pv, for simulated typing: mise run install provides it (or: brew install pv)
+#   pv, for simulated typing: mise install provides it (or: brew install pv)
 
 set -euo pipefail
 IFS=$'\n\t'
