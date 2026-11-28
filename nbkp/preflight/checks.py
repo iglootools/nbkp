@@ -21,7 +21,7 @@ Four-phase check hierarchy (each level gates the next):
 """
 
 import shutil
-from collections.abc import Callable, Collection, Sequence
+from collections.abc import Callable, Collection, Iterable, Sequence
 from dataclasses import dataclass
 from functools import partial
 
@@ -52,6 +52,7 @@ from nbkp.preflight.status.result import PreflightResult
 from nbkp.preflight.status.ssh import (
     HostToolCapabilities,
     SshEndpointDiagnostics,
+    SshEndpointErrorKind,
     SshEndpointStatus,
     SshEndpointToolNeeds,
 )
@@ -170,9 +171,16 @@ def check_all_syncs(
         progress,
         run=run,
     )
+    observed_volume_statuses = _with_volumes_dropped_later(
+        volume_statuses,
+        [*src_ep_statuses.values(), *dst_ep_statuses.values()],
+    )
     return PreflightResult(
-        ssh_endpoint_statuses=ssh_statuses,
-        volume_statuses=volume_statuses,
+        ssh_endpoint_statuses=_with_hosts_dropped_later(
+            ssh_statuses,
+            observed_volume_statuses.values(),
+        ),
+        volume_statuses=observed_volume_statuses,
         source_endpoint_statuses=src_ep_statuses,
         destination_endpoint_statuses=dst_ep_statuses,
         sync_statuses=_sync_statuses(
@@ -183,6 +191,47 @@ def check_all_syncs(
             dry_run=dry_run,
         ),
     )
+
+
+def _with_volumes_dropped_later(
+    volume_statuses: dict[str, VolumeStatus],
+    endpoint_statuses: Sequence[SourceEndpointStatus | DestinationEndpointStatus],
+) -> dict[str, VolumeStatus]:
+    """
+    Return *volume_statuses* with the volumes whose host dropped later on.
+
+    A host dropping during the endpoint checks leaves the endpoint carrying its
+    volume's disconnected status; recorded only there, the volume would still
+    read as active in the volumes table and in troubleshoot.
+    """
+    dropped = {
+        ep.volume_status.slug: ep.volume_status
+        for ep in endpoint_statuses
+        if not ep.volume_status.active and volume_statuses[ep.volume_status.slug].active
+    }
+    return {slug: dropped.get(slug, vs) for slug, vs in volume_statuses.items()}
+
+
+def _with_hosts_dropped_later(
+    ssh_statuses: dict[str, SshEndpointStatus],
+    volume_statuses: Iterable[VolumeStatus],
+) -> dict[str, SshEndpointStatus]:
+    """
+    Return *ssh_statuses* with the hosts found unreachable after their own probe.
+
+    A host can answer its probe, then drop while one of its volumes or sync
+    endpoints is observed (see :func:`_disconnected_volume_status`). The
+    unreachable status is then recorded on that volume only; troubleshoot and
+    the SSH table read the endpoint statuses, and skip a volume's
+    ``SSH_ENDPOINT_INACTIVE`` as a pointer to them, so the drop would
+    otherwise be reported nowhere.
+    """
+    dropped = {
+        vs.ssh_endpoint_status.slug: vs.ssh_endpoint_status
+        for vs in volume_statuses
+        if SshEndpointErrorKind.UNREACHABLE in vs.ssh_endpoint_status.errors
+    }
+    return {**ssh_statuses, **dropped}
 
 
 def check_step_count(

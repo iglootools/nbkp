@@ -53,6 +53,7 @@ from nbkp.preflight.status.volume import (
     VolumeStatus,
 )
 from nbkp.preflight.testkit import check_sync, check_volume
+from nbkp.preflight.troubleshoot import Layer, collect_issues
 from nbkp.preflight.volume_checks import check_volume_capabilities, observe_ssh_endpoint
 from nbkp.remote.dispatch import build_tool_lookup_args
 from nbkp.remote.endpoints import EndpointFilter, ResolvedEndpoint, ResolvedEndpoints
@@ -2845,6 +2846,21 @@ def _nas_and_local_config(tmp_path: Path) -> Config:
     )
 
 
+def _assert_drop_reported(result: PreflightResult, host: str) -> None:
+    """Assert *host* is unreachable where the SSH table and troubleshoot read."""
+    assert result.ssh_endpoint_statuses[host].errors == [
+        SshEndpointErrorKind.UNREACHABLE,
+    ]
+    issues = collect_issues(
+        result.ssh_endpoint_statuses,
+        result.volume_statuses,
+        result.sync_statuses,
+    )
+    assert (Layer.SSH_ENDPOINT, host, SshEndpointErrorKind.UNREACHABLE) in [
+        (i.layer, i.subject, i.error) for i in issues
+    ]
+
+
 class TestConnectionLostDuringPreflight:
     """
     A host that drops after the first probe is unreachable for that host only.
@@ -2872,6 +2888,7 @@ class TestConnectionLostDuringPreflight:
         )
         assert result.sync_statuses["remote"].is_expected_inactive()
         assert result.sync_statuses["local"].active
+        _assert_drop_reported(result, "nas")
 
     def test_during_endpoint_observation(self, tmp_path: Path) -> None:
         config = _nas_and_local_config(tmp_path)
@@ -2884,14 +2901,17 @@ class TestConnectionLostDuringPreflight:
 
         result = _check_all(config, run, resolved_endpoints=_make_resolved(config))
 
-        assert result.volume_statuses["nas"].active
         src = result.source_endpoint_statuses["ep-nas"]
         assert src.errors == [SourceEndpointErrorKind.VOLUME_INACTIVE]
         assert src.volume_status.ssh_endpoint_status.errors == [
             SshEndpointErrorKind.UNREACHABLE,
         ]
+        assert result.volume_statuses["nas"].errors == [
+            VolumeErrorKind.SSH_ENDPOINT_INACTIVE,
+        ]
         assert result.sync_statuses["remote"].is_expected_inactive()
         assert result.sync_statuses["local"].active
+        _assert_drop_reported(result, "nas")
 
     def test_during_destination_endpoint_observation(self, tmp_path: Path) -> None:
         base = _nas_and_local_config(tmp_path)
@@ -2928,14 +2948,15 @@ class TestConnectionLostDuringPreflight:
 
         result = _check_all(config, run, resolved_endpoints=_make_resolved(config))
 
-        assert result.volume_statuses["nas"].active
         dst = result.destination_endpoint_statuses["ep-nas-dst"]
         assert dst.errors == [DestinationEndpointErrorKind.VOLUME_INACTIVE]
         assert dst.volume_status.ssh_endpoint_status.errors == [
             SshEndpointErrorKind.UNREACHABLE,
         ]
+        assert not result.volume_statuses["nas"].active
         assert result.sync_statuses["push"].is_expected_inactive()
         assert result.sync_statuses["local"].active
+        _assert_drop_reported(result, "nas")
 
     def test_local_errors_still_propagate(self, tmp_path: Path) -> None:
         config = _nas_and_local_config(tmp_path)

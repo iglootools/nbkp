@@ -602,8 +602,10 @@ Checks include:
   lost later in preflight (each remote command connects anew, so a host can fall
   asleep half-way) makes the volume or sync endpoint being probed unreachable in
   the same way, with its cause, instead of aborting the checks of every other
-  host. Any other exception during the probe is a bug and propagates instead of
-  being reported as an unreachable host.
+  host. The host itself is then reported `UNREACHABLE` in the result, and the
+  volume inactive, so the SSH table and `troubleshoot` show the drop rather than
+  only the cascade it leaves on the syncs. Any other exception during the probe
+  is a bug and propagates instead of being reported as an unreachable host.
 - **Rsync availability** — rsync must be installed and version 3.0+ (macOS
   `openrsync` is rejected). Host tool errors apply to localhost too: a remote
   host's errors cascade to its volumes (`SSH_ENDPOINT_INACTIVE`), while the
