@@ -105,6 +105,10 @@ def _from_keyring(passphrase_id: str) -> str:
     return password
 
 
+type PassphraseFn = Callable[[str], str]
+"""Returns the passphrase of a passphrase-id, raising :class:`CredentialError`."""
+
+
 type PromptFn = Callable[[str], str]
 """Asks the operator for the passphrase of a passphrase-id (``prompt`` provider).
 
@@ -232,7 +236,7 @@ class PassphraseCache:
     def get_or_retrieve(
         self,
         passphrase_id: str,
-        retrieve_fn: Callable[[str], str],
+        retrieve_fn: PassphraseFn,
     ) -> str:
         """
         Return the passphrase of *passphrase_id*, retrieving it on first use.
@@ -256,7 +260,7 @@ def build_passphrase_fn(
     prompt: PromptFn,
     environ: Mapping[str, str] = os.environ,
     run: CommandFn = run_captured,
-) -> tuple[Callable[[str], str], PassphraseCache]:
+) -> tuple[PassphraseFn, PassphraseCache]:
     """
     Build a passphrase retrieval function backed by a per-run cache.
 
@@ -333,7 +337,7 @@ class PassphrasePrefetch:
 
 def prefetch_passphrases(
     config: Config,
-    passphrase_fn: Callable[[str], str],
+    passphrase_fn: PassphraseFn,
     *,
     on_prefetch_start: Callable[[str], None] | None = None,
     on_prefetch_end: Callable[[str, PassphrasePrefetch], None] | None = None,
@@ -379,7 +383,7 @@ def prefetch_passphrases(
 def _prefetch_one(
     pid: str,
     volumes: tuple[str, ...],
-    passphrase_fn: Callable[[str], str],
+    passphrase_fn: PassphraseFn,
     on_prefetch_start: Callable[[str], None] | None,
     on_prefetch_end: Callable[[str, PassphrasePrefetch], None] | None,
 ) -> PassphrasePrefetch:

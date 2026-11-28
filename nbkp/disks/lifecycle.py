@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from functools import partial
 
 from nbkp.config import Config, LocalVolume, MountConfig, Volume
-from nbkp.credentials import CredentialError
+from nbkp.credentials import CredentialError, PassphraseFn
 from nbkp.disks.detection import (
     DeviceProbeError,
     detect_device_present,
@@ -312,7 +312,7 @@ def mount_volume(
     volume: Volume,
     mount_config: MountConfig,
     resolved_endpoints: ResolvedEndpoints,
-    passphrase_fn: Callable[[str], str],
+    passphrase_fn: PassphraseFn,
     *,
     run: VolumeCommandRunner = run_on_volume,
     sleep: Callable[[float], None] = time.sleep,
@@ -363,7 +363,7 @@ def _mount_volume_inner(
     volume: Volume,
     mount_config: MountConfig,
     resolved_endpoints: ResolvedEndpoints,
-    passphrase_fn: Callable[[str], str],
+    passphrase_fn: PassphraseFn,
     *,
     run: VolumeCommandRunner,
     sleep: Callable[[float], None],
@@ -408,7 +408,7 @@ def _resolve_device_to_mount(
     volume: Volume,
     mount_config: MountConfig,
     resolved_endpoints: ResolvedEndpoints,
-    passphrase_fn: Callable[[str], str],
+    passphrase_fn: PassphraseFn,
     *,
     run: VolumeCommandRunner,
     sleep: Callable[[float], None],
@@ -460,7 +460,7 @@ def _unlock(
     device_uuid: str,
     passphrase_id: str,
     resolved_endpoints: ResolvedEndpoints,
-    passphrase_fn: Callable[[str], str],
+    passphrase_fn: PassphraseFn,
     *,
     run: VolumeCommandRunner,
     sleep: Callable[[float], None],
@@ -680,7 +680,7 @@ def _umount_volume_inner(
 def mount_volumes(
     config: Config,
     resolved_endpoints: ResolvedEndpoints,
-    passphrase_fn: Callable[[str], str],
+    passphrase_fn: PassphraseFn,
     *,
     names: list[str] | None = None,
     on_mount_start: Callable[[str], None] | None = None,

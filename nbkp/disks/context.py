@@ -9,7 +9,7 @@ from collections.abc import Callable, Generator
 from contextlib import contextmanager
 
 from nbkp.config import Config
-from nbkp.credentials import PassphrasePrefetch, prefetch_passphrases
+from nbkp.credentials import PassphraseFn, PassphrasePrefetch, prefetch_passphrases
 from nbkp.disks.lifecycle import (
     MountResult,
     UmountResult,
@@ -29,7 +29,7 @@ from nbkp.remote.endpoints import ResolvedEndpoints
 def managed_mount(
     config: Config,
     resolved: ResolvedEndpoints,
-    passphrase_fn: Callable[[str], str],
+    passphrase_fn: PassphraseFn,
     *,
     mount: bool = True,
     umount: bool = True,
@@ -129,7 +129,7 @@ def managed_mount(
 def _mount_phase(
     config: Config,
     resolved: ResolvedEndpoints,
-    passphrase_fn: Callable[[str], str],
+    passphrase_fn: PassphraseFn,
     *,
     names: list[str] | None,
     on_prefetch_start: Callable[[str], None] | None,
@@ -157,7 +157,7 @@ def mount_phase(
     config: Config,
     resolved: ResolvedEndpoints,
     *,
-    passphrase_fn: Callable[[str], str],
+    passphrase_fn: PassphraseFn,
     run: VolumeCommandRunner = run_on_volume,
     names: list[str] | None = None,
     on_prefetch_start: Callable[[str], None] | None = None,

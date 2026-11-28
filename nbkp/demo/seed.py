@@ -19,6 +19,7 @@ from pydantic import BaseModel, ConfigDict
 
 from nbkp.config import Config, CredentialProvider, RsyncOptions, SshEndpoint
 from nbkp.config.testkit import write_config
+from nbkp.credentials import PassphraseFn
 from nbkp.disks import MountResult, UmountResult, mount_phase, umount_volumes
 from nbkp.policy import Severity
 from nbkp.remote.dispatch import VolumeCommandRunner, run_on_volume
@@ -546,7 +547,7 @@ def encrypted_volume_mounted(
     config: Config,
     resolved: ResolvedEndpoints,
     *,
-    passphrase_fn: Callable[[str], str] = lambda _: LUKS_PASSPHRASE,
+    passphrase_fn: PassphraseFn = lambda _: LUKS_PASSPHRASE,
     run: VolumeCommandRunner = run_on_volume,
     on_step_start: Callable[[str], None] | None = None,
     on_step_end: Callable[[str, Severity, str | None], None] | None = None,

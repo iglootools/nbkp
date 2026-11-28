@@ -1,6 +1,6 @@
 """Mount and umount drives around a command, under the run lock, with progress."""
 
-from collections.abc import Callable, Generator
+from collections.abc import Generator
 from contextlib import contextmanager
 
 import typer
@@ -12,7 +12,7 @@ from nbkp.cliwiring.mount_progress import LifecycleProgress, mount_display_names
 from nbkp.cliwiring.output_format import OutputFormat
 from nbkp.cliwiring.runtime import Runtime
 from nbkp.config import Config
-from nbkp.credentials import build_passphrase_fn
+from nbkp.credentials import PassphraseFn, build_passphrase_fn
 from nbkp.disks import (
     MountObservation,
     UmountResult,
@@ -52,7 +52,7 @@ def lifecycle_session(
     names: list[str] | None = None,
     strictness: Strictness = Strictness.IGNORE_INACTIVE,
     umounting: bool = True,
-) -> Generator[tuple[Callable[[str], str], LifecycleProgress]]:
+) -> Generator[tuple[PassphraseFn, LifecycleProgress]]:
     """
     Yield the passphrase function and progress bars for a mount lifecycle.
 

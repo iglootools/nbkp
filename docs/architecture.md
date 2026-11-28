@@ -147,6 +147,7 @@ graph TD
     credentials --> theme
     demo --> cliwiring
     demo --> config
+    demo --> credentials
     demo --> disks
     demo --> ordering
     demo --> policy
