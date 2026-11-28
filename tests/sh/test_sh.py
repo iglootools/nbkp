@@ -26,6 +26,7 @@ from nbkp.sh import ScriptOptions, VolumeWithoutPathError, generate_script
 from nbkp.sh.quoting import quote, remote_command
 from nbkp.sh.spec import build_sync_spec
 from nbkp.sh.steps import Step, build_steps
+from tests.fixtures.config import two_volume_config
 
 _NOW = datetime(2026, 2, 21, 12, 0, 0, tzinfo=UTC)
 _OPTIONS = ScriptOptions(platform="linux", config_path="/etc/nbkp/config.yaml")
@@ -43,22 +44,12 @@ def _bash_n(script: str) -> None:
 
 
 def _local_to_local_config() -> Config:
-    src = LocalVolume(slug="src", path="/mnt/src")
-    dst = LocalVolume(slug="dst", path="/mnt/dst")
-    return Config(
-        volumes={"src": src, "dst": dst},
-        sync_endpoints={
-            "ep-src": SyncEndpoint(slug="ep-src", volume="src", subdir="photos"),
-            "ep-dst": SyncEndpoint(slug="ep-dst", volume="dst", subdir="backup"),
-        },
-        syncs={
-            "my-sync": SyncConfig(
-                slug="my-sync",
-                source="ep-src",
-                destination="ep-dst",
-            ),
-        },
+    _, config = two_volume_config(
+        slug="my-sync",
+        src_subdir="photos",
+        dst_subdir="backup",
     )
+    return config
 
 
 def _local_to_remote_config() -> Config:
@@ -126,49 +117,19 @@ def _remote_to_local_config() -> Config:
 
 
 def _btrfs_config() -> Config:
-    src = LocalVolume(slug="src", path="/mnt/src")
-    dst = LocalVolume(slug="dst", path="/mnt/dst")
-    return Config(
-        volumes={"src": src, "dst": dst},
-        sync_endpoints={
-            "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
-            "ep-dst": SyncEndpoint(
-                slug="ep-dst",
-                volume="dst",
-                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True, max_snapshots=5),
-            ),
-        },
-        syncs={
-            "btrfs-sync": SyncConfig(
-                slug="btrfs-sync",
-                source="ep-src",
-                destination="ep-dst",
-            ),
-        },
+    _, config = two_volume_config(
+        slug="btrfs-sync",
+        dst_btrfs=BtrfsSnapshotConfig(enabled=True, max_snapshots=5),
     )
+    return config
 
 
 def _btrfs_no_prune_config() -> Config:
-    src = LocalVolume(slug="src", path="/mnt/src")
-    dst = LocalVolume(slug="dst", path="/mnt/dst")
-    return Config(
-        volumes={"src": src, "dst": dst},
-        sync_endpoints={
-            "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
-            "ep-dst": SyncEndpoint(
-                slug="ep-dst",
-                volume="dst",
-                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-            ),
-        },
-        syncs={
-            "btrfs-sync": SyncConfig(
-                slug="btrfs-sync",
-                source="ep-src",
-                destination="ep-dst",
-            ),
-        },
+    _, config = two_volume_config(
+        slug="btrfs-sync",
+        dst_btrfs=BtrfsSnapshotConfig(enabled=True),
     )
+    return config
 
 
 def _btrfs_chain_config() -> Config:
@@ -207,44 +168,17 @@ def _btrfs_chain_config() -> Config:
 
 
 def _disabled_config() -> Config:
-    src = LocalVolume(slug="src", path="/mnt/src")
-    dst = LocalVolume(slug="dst", path="/mnt/dst")
-    return Config(
-        volumes={"src": src, "dst": dst},
-        sync_endpoints={
-            "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
-            "ep-dst": SyncEndpoint(slug="ep-dst", volume="dst"),
-        },
-        syncs={
-            "disabled-sync": SyncConfig(
-                slug="disabled-sync",
-                source="ep-src",
-                destination="ep-dst",
-                enabled=False,
-            ),
-        },
-    )
+    _, config = two_volume_config(slug="disabled-sync", enabled=False)
+    return config
 
 
 def _filters_config() -> Config:
-    src = LocalVolume(slug="src", path="/mnt/src")
-    dst = LocalVolume(slug="dst", path="/mnt/dst")
-    return Config(
-        volumes={"src": src, "dst": dst},
-        sync_endpoints={
-            "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
-            "ep-dst": SyncEndpoint(slug="ep-dst", volume="dst"),
-        },
-        syncs={
-            "filtered-sync": SyncConfig(
-                slug="filtered-sync",
-                source="ep-src",
-                destination="ep-dst",
-                filters=["+ *.jpg", "- *.tmp", "H .git"],
-                filter_file="~/.config/nbkp/filters.rules",
-            ),
-        },
+    _, config = two_volume_config(
+        slug="filtered-sync",
+        filters=["+ *.jpg", "- *.tmp", "H .git"],
+        filter_file="~/.config/nbkp/filters.rules",
     )
+    return config
 
 
 def _proxy_jump_config() -> Config:
@@ -979,21 +913,10 @@ class TestEdgeCases:
         _bash_n(script)
 
     def test_paths_with_spaces(self) -> None:
-        src = LocalVolume(slug="src", path="/mnt/my data")
-        dst = LocalVolume(slug="dst", path="/mnt/my backup")
-        config = Config(
-            volumes={"src": src, "dst": dst},
-            sync_endpoints={
-                "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
-                "ep-dst": SyncEndpoint(slug="ep-dst", volume="dst"),
-            },
-            syncs={
-                "space-sync": SyncConfig(
-                    slug="space-sync",
-                    source="ep-src",
-                    destination="ep-dst",
-                ),
-            },
+        _, config = two_volume_config(
+            slug="space-sync",
+            src=LocalVolume(slug="src", path="/mnt/my data"),
+            dst=LocalVolume(slug="dst", path="/mnt/my backup"),
         )
         script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         assert "'/mnt/my data/'" in script
@@ -1007,25 +930,12 @@ class TestEdgeCases:
         assert "# Config: <stdin>" in script
 
     def test_custom_rsync_options(self) -> None:
-        src = LocalVolume(slug="src", path="/mnt/src")
-        dst = LocalVolume(slug="dst", path="/mnt/dst")
-        config = Config(
-            volumes={"src": src, "dst": dst},
-            sync_endpoints={
-                "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
-                "ep-dst": SyncEndpoint(slug="ep-dst", volume="dst"),
-            },
-            syncs={
-                "custom-sync": SyncConfig(
-                    slug="custom-sync",
-                    source="ep-src",
-                    destination="ep-dst",
-                    rsync_options=RsyncOptions(
-                        default_options_override=["-a", "--delete"],
-                        extra_options=["--bwlimit=1000", "--progress"],
-                    ),
-                ),
-            },
+        _, config = two_volume_config(
+            slug="custom-sync",
+            rsync_options=RsyncOptions(
+                default_options_override=["-a", "--delete"],
+                extra_options=["--bwlimit=1000", "--progress"],
+            ),
         )
         script = generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints={})
         assert "--bwlimit=1000" in script
@@ -1127,51 +1037,18 @@ class TestRemoteBtrfs:
 
 class TestHardLink:
     def _hl_config(self) -> Config:
-        src = LocalVolume(slug="src", path="/mnt/src")
-        dst = LocalVolume(slug="dst", path="/mnt/dst")
-        return Config(
-            volumes={"src": src, "dst": dst},
-            sync_endpoints={
-                "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
-                "ep-dst": SyncEndpoint(
-                    slug="ep-dst",
-                    volume="dst",
-                    hard_link_snapshots=HardLinkSnapshotConfig(
-                        enabled=True,
-                        max_snapshots=5,
-                    ),
-                ),
-            },
-            syncs={
-                "hl-sync": SyncConfig(
-                    slug="hl-sync",
-                    source="ep-src",
-                    destination="ep-dst",
-                ),
-            },
+        _, config = two_volume_config(
+            slug="hl-sync",
+            dst_hard_link=HardLinkSnapshotConfig(enabled=True, max_snapshots=5),
         )
+        return config
 
     def _hl_no_prune_config(self) -> Config:
-        src = LocalVolume(slug="src", path="/mnt/src")
-        dst = LocalVolume(slug="dst", path="/mnt/dst")
-        return Config(
-            volumes={"src": src, "dst": dst},
-            sync_endpoints={
-                "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
-                "ep-dst": SyncEndpoint(
-                    slug="ep-dst",
-                    volume="dst",
-                    hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
-                ),
-            },
-            syncs={
-                "hl-sync": SyncConfig(
-                    slug="hl-sync",
-                    source="ep-src",
-                    destination="ep-dst",
-                ),
-            },
+        _, config = two_volume_config(
+            slug="hl-sync",
+            dst_hard_link=HardLinkSnapshotConfig(enabled=True),
         )
+        return config
 
     def _hl_remote_config(self) -> Config:
         server = SshEndpoint(

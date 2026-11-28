@@ -19,6 +19,7 @@ from nbkp.config import (
 class SyncFields(TypedDict, total=False):
     """The fields of the sync :func:`two_volume_config` builds that a test may set."""
 
+    enabled: bool
     rsync_options: RsyncOptions
     filters: list[str]
     filter_file: str | None
@@ -26,6 +27,7 @@ class SyncFields(TypedDict, total=False):
 
 def two_volume_config(
     *,
+    slug: str = "s1",
     src: Volume | None = None,
     dst: Volume | None = None,
     ssh_endpoints: Sequence[SshEndpoint] = (),
@@ -38,13 +40,13 @@ def two_volume_config(
     **sync_fields: Unpack[SyncFields],
 ) -> tuple[SyncConfig, Config]:
     """
-    Return sync ``s1`` from endpoint ``ep-src`` on volume *src* to ``ep-dst`` on *dst*.
+    Return sync *slug* from endpoint ``ep-src`` on volume *src* to ``ep-dst`` on *dst*.
 
     *src* and *dst* default to local volumes ``/mnt/src`` and ``/mnt/dst``; they
     must be named ``src`` and ``dst``. *ssh_endpoints* are the SSH endpoints the
     remote volumes and their proxies name.
     """
-    sync = SyncConfig(slug="s1", source="ep-src", destination="ep-dst", **sync_fields)
+    sync = SyncConfig(slug=slug, source="ep-src", destination="ep-dst", **sync_fields)
     config = Config(
         ssh_endpoints={ep.slug: ep for ep in ssh_endpoints},
         volumes={
@@ -67,6 +69,6 @@ def two_volume_config(
                 hard_link_snapshots=dst_hard_link or HardLinkSnapshotConfig(),
             ),
         },
-        syncs={"s1": sync},
+        syncs={slug: sync},
     )
     return sync, config
