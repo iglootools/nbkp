@@ -21,6 +21,7 @@ from nbkp.cliwiring.options import (
 from nbkp.cliwiring.output_format import OutputFormat
 from nbkp.cliwiring.runtime import Runtime, runtime_of
 from nbkp.config import Config
+from nbkp.disks.cli.hints import print_auth_hint
 from nbkp.disks.cli.options import NAME_OPTION
 from nbkp.disks.lifecycle import UmountResult, any_failed, umount_volumes
 from nbkp.disks.mount_checks import check_mount_status
@@ -82,17 +83,13 @@ def umount_cmd(
         umount_results=results,
         run=runtime.run,
     )
+    invocation = Invocation.of(config, location, exclude_location, network)
+    if output is OutputFormat.HUMAN:
+        print_auth_hint(results, invocation)
     if any_failed(results):
         if output is OutputFormat.HUMAN:
             Console(stderr=True).print(
-                format_troubleshoot_hint(
-                    Invocation.of(
-                        config,
-                        location,
-                        exclude_location,
-                        network,
-                    ),
-                ),
+                format_troubleshoot_hint(invocation),
                 soft_wrap=True,
             )
         raise typer.Exit(1)

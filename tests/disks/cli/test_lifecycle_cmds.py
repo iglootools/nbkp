@@ -283,6 +283,16 @@ class TestUmount:
         assert entry["detail"] == "lock failed (exit 1): busy"
         assert entry["warning"] == "LUKS container still unlocked, manual lock needed"
 
+    def test_polkit_refusal_suggests_setup_auth(self) -> None:
+        run = _mounted_drive(
+            unmount=completed(1, stderr="Not Authorized to perform operation"),
+        )
+
+        exit_code, output = _invoke(run, "umount")
+
+        assert exit_code == 1
+        assert "nbkp disks setup-auth -c config.yaml" in output
+
     def test_failure_suggests_troubleshoot(self) -> None:
         run = _mounted_drive(unmount=completed(1, stderr="target is busy"))
 

@@ -35,6 +35,8 @@ class UmountFailureKind(enum.StrEnum):
     UNMOUNT_FAILED = "unmount-failed"
     LOCK_FAILED = "lock-failed"
     """Unmounted (or not mounted) but the LUKS container is still unlocked."""
+    NOT_AUTHORIZED = "not-authorized"
+    """polkit refused the unmount or lock: no rule grants it."""
     UDISKS_NOT_AVAILABLE = "udisks-not-available"
     PROBE_FAILED = "probe-failed"
     UNREACHABLE = "unreachable"

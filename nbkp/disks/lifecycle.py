@@ -139,25 +139,27 @@ MOUNT_STAGE_FAILURES: frozenset[MountFailureKind] = frozenset(
 )
 
 
-def _classify_udisks_failure(
+def _classify_udisks_failure[K: (MountFailureKind, UmountFailureKind)](
     result: subprocess.CompletedProcess[str],
-    failed: MountFailureKind,
+    failed: K,
     step: LifecycleStep,
-) -> tuple[MountFailureKind, LifecycleFailure]:
+) -> tuple[K, LifecycleFailure]:
     """
     Classify a failed udisksctl step into a reason and its facts.
 
     A polkit refusal (``--no-user-interaction`` with no rule) maps to
-    ``NOT_AUTHORIZED`` so preflight can route to the polkit-rules fix; a
+    ``NOT_AUTHORIZED`` so the operator is sent to ``disks setup-auth``; a
     missing daemon/binary maps to ``UDISKS_NOT_AVAILABLE``; anything else is
-    the stage-specific ``failed`` reason.
+    the stage-specific ``failed`` reason. Mount and umount steps are classified
+    alike: both kinds of failure enum hold those two members.
     """
     failure = _command_failure(step, result)
     lowered = (failure.message or "").lower()
+    kind = type(failed)
     if any(sig in lowered for sig in _NOT_AUTHORIZED_SIGNATURES):
-        return MountFailureKind.NOT_AUTHORIZED, failure
+        return kind.NOT_AUTHORIZED, failure
     elif any(sig in lowered for sig in _UDISKS_UNAVAILABLE_SIGNATURES):
-        return MountFailureKind.UDISKS_NOT_AVAILABLE, failure
+        return kind.UDISKS_NOT_AVAILABLE, failure
     else:
         return failed, failure
 
@@ -248,13 +250,18 @@ def any_failed(results: Sequence[MountResult | UmountResult]) -> bool:
     return any(not r.success for r in results)
 
 
-def refused_by_polkit(results: Sequence[MountResult]) -> bool:
+def refused_by_polkit(results: Sequence[MountResult | UmountResult]) -> bool:
     """
-    Return whether udisks refused an unlock or mount for want of a polkit rule.
+    Return whether udisks refused a lifecycle step for want of a polkit rule.
 
-    That is the failure ``disks setup-auth`` fixes.
+    That is the failure ``disks setup-auth`` fixes, for an unlock or mount as for
+    an unmount or lock.
     """
-    return any(r.failure_reason is MountFailureKind.NOT_AUTHORIZED for r in results)
+    return any(
+        r.failure_reason
+        in (MountFailureKind.NOT_AUTHORIZED, UmountFailureKind.NOT_AUTHORIZED)
+        for r in results
+    )
 
 
 def lifecycle_volumes(
@@ -630,11 +637,16 @@ def _umount_volume_inner(
             run=run,
         )
         if result.returncode != 0:
+            reason, failure = _classify_udisks_failure(
+                result,
+                UmountFailureKind.UNMOUNT_FAILED,
+                LifecycleStep.UNMOUNT,
+            )
             return UmountResult(
                 volume_slug=slug,
                 success=False,
-                failure_reason=UmountFailureKind.UNMOUNT_FAILED,
-                failure=_command_failure(LifecycleStep.UNMOUNT, result),
+                failure_reason=reason,
+                failure=failure,
             )
 
     # For an encrypted volume, a resolved device is the cleartext mapper, which
@@ -650,11 +662,16 @@ def _umount_volume_inner(
         if result.returncode != 0:
             # A failure, not a warning: the volume is left unlocked, which is
             # what the lifecycle exists to prevent.
+            reason, failure = _classify_udisks_failure(
+                result,
+                UmountFailureKind.LOCK_FAILED,
+                LifecycleStep.LOCK,
+            )
             return UmountResult(
                 volume_slug=slug,
                 success=False,
-                failure_reason=UmountFailureKind.LOCK_FAILED,
-                failure=_command_failure(LifecycleStep.LOCK, result),
+                failure_reason=reason,
+                failure=failure,
             )
 
     return UmountResult(volume_slug=slug, success=True)

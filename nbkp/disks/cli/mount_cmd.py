@@ -5,7 +5,6 @@ from typing import Annotated
 
 import typer
 from rich.console import Console
-from rich.text import Text
 
 from nbkp.cliwiring.config import load_config_or_exit, resolve_endpoints
 from nbkp.cliwiring.disks import require_known_names, show_plan, show_volume_statuses
@@ -23,9 +22,10 @@ from nbkp.cliwiring.options import (
 from nbkp.cliwiring.output_format import OutputFormat
 from nbkp.cliwiring.runtime import Runtime, runtime_of
 from nbkp.config import Config
+from nbkp.disks.cli.hints import print_auth_hint
 from nbkp.disks.cli.options import NAME_OPTION
 from nbkp.disks.context import mount_phase
-from nbkp.disks.lifecycle import MountResult, any_failed, refused_by_polkit
+from nbkp.disks.lifecycle import MountResult, any_failed
 from nbkp.disks.mount_checks import check_mount_status
 from nbkp.disks.output import mount_result_json
 from nbkp.disks.plan import plan_lifecycle
@@ -82,7 +82,7 @@ def mount_cmd(
     _show_results(cfg, resolved, results, name, output)
     invocation = Invocation.of(config, location, exclude_location, network)
     if output is OutputFormat.HUMAN:
-        _print_auth_hint(results, invocation)
+        print_auth_hint(results, invocation)
     if any_failed(results):
         if output is OutputFormat.HUMAN:
             Console(stderr=True).print(
@@ -145,20 +145,3 @@ def _show_results(
         output,
         {r.volume_slug: mount_result_json(r) for r in results},
     )
-
-
-def _print_auth_hint(results: list[MountResult], invocation: Invocation) -> None:
-    """Point at ``disks setup-auth`` when polkit refused an unlock or mount."""
-    if refused_by_polkit(results):
-        console = Console()
-        console.print(
-            "udisks refused the operation (no polkit rule). Generate one with:",
-        )
-        # soft_wrap: the command must stay on one line to copy-paste.
-        console.print(
-            Text(
-                invocation.command("disks", "setup-auth", endpoint_flags=False),
-                style="bold",
-            ),
-            soft_wrap=True,
-        )
