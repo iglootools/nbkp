@@ -90,13 +90,18 @@ newer than the snapshot `latest` points to: one left behind by a previously
 failed sync. While `latest` points to `/dev/null`, no sync has completed yet, so
 every snapshot directory is an orphan: a first run interrupted before `latest`
 moved leaves a partial snapshot, which would otherwise sort before the next
-complete one and pass for complete. When `latest` is absent, the cleanup deletes
+complete one and pass for complete. An orphan that cannot be removed fails the
+sync (`failure`: `orphan-cleanup`) before a new snapshot is made: the new one
+would move `latest` past the orphan, out of the cleanup's reach, and retention
+and `snapshots show` would then count the incomplete tree as a backup. When
+`latest` is absent, the cleanup deletes
 nothing and records an `orphan-cleanup` warning: nbkp never removes the link
 (`init` points it at `/dev/null`), so its absence is outside damage, and the
 snapshots may well be complete. Preflight reports the missing link, so only
 `--strictness ignore-all` attempts such a sync. The generated script does the
-same: it removes every snapshot when `latest` points to `/dev/null`, and skips
-the cleanup when it cannot read `latest`. After a failed rsync
+same: it removes every snapshot when `latest` points to `/dev/null`, fails the
+sync when a removal fails, and skips the cleanup when it cannot read `latest`.
+After a failed rsync
 the new snapshot directory is also removed straight away. Btrfs snapshots do not
 need orphan cleanup because snapshots are created atomically from a complete
 sync to `staging/` — a failed sync leaves `staging/` in a partial state but
@@ -110,11 +115,12 @@ hard-link, `snapshot` for btrfs — and `latest` stays where it was. Otherwise
 `latest` would move back in time, and the next orphan cleanup would remove every
 complete snapshot newer than it. The generated script applies the same rule.
 
-**Best-effort steps** — Orphan cleanup, pruning, and removal of the snapshot
-directory after a failed rsync never fail a sync: the snapshot that matters is
-either complete (pruning runs after `latest` moved) or absent, and a leftover
-directory is removed by the next run's orphan cleanup. A failure in one of these
-steps is recorded as a warning on the sync's result (`warnings` in JSON, a
+**Best-effort steps** — Pruning, removal of the snapshot directory after a
+failed rsync, and orphan cleanup when `latest` is absent or the listing fails
+never fail a sync: the snapshot that matters is either complete (pruning runs
+after `latest` moved) or absent, and a leftover directory is removed by the next
+run's orphan cleanup, which fails that run if it cannot. A failure in one of
+these steps is recorded as a warning on the sync's result (`warnings` in JSON, a
 `Warning:` line in the results table) instead of being silently ignored, and the
 remaining syncs carry on.
 

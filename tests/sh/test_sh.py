@@ -1208,7 +1208,7 @@ class TestHardLink:
                         if [ "$NBKP_LATEST_LINK" = "/dev/null" ] \\
                             || nbkp_snapshot_after "$snap" "$NBKP_LATEST_NAME"; then
                             nbkp_log "Removing orphaned snapshot: $snap"
-                            { rm -rf "/mnt/dst/snapshots/${snap}" || { find "/mnt/dst/snapshots/${snap}" -type d '!' -perm -0700 -exec chmod u+rwx '{}' ';' && rm -rf "/mnt/dst/snapshots/${snap}"; }; } || nbkp_log "WARN: failed to remove orphaned snapshot: $snap"
+                            { rm -rf "/mnt/dst/snapshots/${snap}" || { find "/mnt/dst/snapshots/${snap}" -type d '!' -perm -0700 -exec chmod u+rwx '{}' ';' && rm -rf "/mnt/dst/snapshots/${snap}"; }; } || { nbkp_log "ERROR: failed to remove orphaned snapshot: $snap"; false; }
                         fi
                     done
                 fi

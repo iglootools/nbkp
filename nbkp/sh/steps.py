@@ -118,12 +118,13 @@ def _orphan_cleanup_block(spec: SyncSpec) -> str:
 
     And all of them while ``latest`` points to ``/dev/null``, as in ``nbkp run``.
 
-    Best-effort, as in ``nbkp run``: a failed removal is only a warning.
-    A ``latest`` that cannot be read, absent or not, skips the cleanup, as
-    ``nbkp run`` skips it when the link is absent.
+    As in ``nbkp run``, a failed removal fails the sync before a new snapshot
+    is made, so ``latest`` never moves past an incomplete snapshot. A
+    ``latest`` that cannot be read, absent or not, skips the cleanup, as
+    ``nbkp run`` skips it, with a warning, when the link is absent.
     """
     rm = _rm_snapshot(spec, SNAP)
-    warn = 'nbkp_log "WARN: failed to remove orphaned snapshot: $snap"'
+    fail = '{ nbkp_log "ERROR: failed to remove orphaned snapshot: $snap"; false; }'
     return dedent(f"""\
         if [ "$NBKP_DRY_RUN" = false ]; then
             NBKP_LATEST_LINK={_readlink_latest(spec)}
@@ -133,7 +134,7 @@ def _orphan_cleanup_block(spec: SyncSpec) -> str:
                     if [ "$NBKP_LATEST_LINK" = "/dev/null" ] \\
                         || nbkp_snapshot_after "$snap" "$NBKP_LATEST_NAME"; then
                         nbkp_log "Removing orphaned snapshot: $snap"
-                        {rm} || {warn}
+                        {rm} || {fail}
                     fi
                 done
             fi

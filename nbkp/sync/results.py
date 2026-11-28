@@ -36,6 +36,9 @@ class SyncFailureKind(StrEnum):
     """The btrfs snapshot could not be taken."""
     SYMLINK = "symlink"
     """The ``latest`` symlink could not be updated."""
+    ORPHAN_CLEANUP = "orphan-cleanup"
+    """A failed sync's hard-link snapshot could not be removed, so no new one was
+    made: moving ``latest`` past it would make it pass for a complete snapshot."""
 
     # SKIPPED: preflight kept the sync from running.
     INACTIVE = "inactive"
@@ -61,6 +64,7 @@ _OUTCOME_BY_FAILURE: dict[SyncFailureKind, SyncOutcome] = {
     SyncFailureKind.MKDIR: SyncOutcome.FAILED,
     SyncFailureKind.SNAPSHOT: SyncOutcome.FAILED,
     SyncFailureKind.SYMLINK: SyncOutcome.FAILED,
+    SyncFailureKind.ORPHAN_CLEANUP: SyncOutcome.FAILED,
     SyncFailureKind.INACTIVE: SyncOutcome.SKIPPED,
     SyncFailureKind.DRY_RUN_PENDING: SyncOutcome.SKIPPED,
     SyncFailureKind.PREFLIGHT: SyncOutcome.SKIPPED,
@@ -78,6 +82,7 @@ RUNTIME_FAILURES: frozenset[SyncFailureKind] = frozenset(
         SyncFailureKind.MKDIR,
         SyncFailureKind.SNAPSHOT,
         SyncFailureKind.SYMLINK,
+        SyncFailureKind.ORPHAN_CLEANUP,
         SyncFailureKind.UPSTREAM_FAILED,
     },
 )
@@ -102,7 +107,8 @@ class SyncWarningKind(StrEnum):
     """What went wrong without failing the sync."""
 
     ORPHAN_CLEANUP = "orphan-cleanup"
-    """Best-effort: orphaned hard-link snapshots could not be removed."""
+    """Orphaned hard-link snapshots could not be looked for, because ``latest`` is
+    absent or the listing failed. A deletion that fails is a failure instead."""
     PRUNE = "prune"
     """Best-effort: old snapshots could not be pruned."""
     SNAPSHOT_DIR_CLEANUP = "snapshot-dir-cleanup"

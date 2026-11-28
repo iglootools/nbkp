@@ -122,15 +122,24 @@ class TestHardLinkSync:
             ["rm", "-rf", f"/dst/snapshots/{_ORPHAN}"],
         ]
 
-    def test_orphan_cleanup_failure_is_a_warning(self) -> None:
+    def test_orphan_that_cannot_be_removed_fails_before_a_new_snapshot(self) -> None:
+        """A new snapshot would move latest past the orphan, so it looks complete."""
         config = _make_hard_link_config()
         _, statuses = active_statuses(config)
-        runner = _destination_with_orphan().on("rm", returns=_DENIED)
+        rsync = FakeRsync()
+        runner = (
+            _destination_with_orphan()
+            .on("rm", returns=_DENIED)
+            .on("find", returns=_DENIED)
+        )
 
-        results = run_syncs(config, statuses, rsync=FakeRsync(), run_command=runner)
+        results = run_syncs(config, statuses, rsync=rsync, run_command=runner)
 
-        assert results[0].outcome == SyncOutcome.SUCCESS
-        assert [w.kind for w in results[0].warnings] == [SyncWarningKind.ORPHAN_CLEANUP]
+        assert results[0].outcome == SyncOutcome.FAILED
+        assert results[0].failure == SyncFailureKind.ORPHAN_CLEANUP
+        assert runner.commands_starting_with("mkdir") == []
+        assert runner.commands_starting_with("ln") == []
+        assert rsync.calls == []
 
     def test_absent_latest_keeps_every_snapshot_with_a_warning(self) -> None:
         """

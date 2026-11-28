@@ -399,9 +399,12 @@ strictness; cancelled behind a disabled sync, it never fails the run, as the
 disabled sync does not; cancelled behind a failed sync, it is part of that
 failure.
 
-Best-effort steps — orphan cleanup, pruning, removing a half-written snapshot
-directory — never change the outcome: when they fail, the sync's result carries
-a warning instead.
+Best-effort steps — pruning, removing a half-written snapshot directory, looking
+for orphans when `latest` is absent — never change the outcome: when they fail,
+the sync's result carries a warning instead. Removing an orphan is not
+best-effort: when it fails, the sync fails (`orphan-cleanup`) before making a
+new snapshot, since moving `latest` past the orphan would make the incomplete
+snapshot pass for a complete one.
 
 ## Beyond `run`
 
