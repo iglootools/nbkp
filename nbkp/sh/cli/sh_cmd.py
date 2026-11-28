@@ -119,7 +119,7 @@ def sh_cmd(
         raise typer.Exit(1) from e
     if output_file is not None:
         try:
-            _write_script(output_file, script)
+            write_script_file(output_file, script)
         except OSError as e:
             typer.echo(
                 f"Error: cannot write {display_path(output_file)}:"
@@ -133,7 +133,7 @@ def sh_cmd(
         typer.echo(script)
 
 
-def _write_script(path: Path, script: str) -> None:
+def write_script_file(path: Path, script: str) -> None:
     """
     Write *script* to *path*, executable, in one atomic step.
 
