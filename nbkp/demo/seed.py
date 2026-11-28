@@ -344,7 +344,7 @@ def seed_demo(
     )
     if docker:
         _check_docker(base_dir, has_docker=has_docker)
-    try:
+    with as_seed_errors():
         return _seed(
             _seed_dir(base_dir),
             docker=docker,
@@ -354,6 +354,18 @@ def seed_demo(
             credential_provider=credential_provider,
             steps=steps,
         )
+
+
+@contextmanager
+def as_seed_errors() -> Generator[None]:
+    """
+    Raise what a seeding step fails with as a :class:`SeedError` of its kind.
+
+    Covers the failures the steps report: Docker, SSH not coming up, a command in
+    a container, the files.
+    """
+    try:
+        yield
     except DockerError as e:
         raise SeedError(SeedErrorKind.DOCKER_FAILED, e.detail) from e
     except TimeoutError as e:
