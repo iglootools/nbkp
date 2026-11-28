@@ -332,7 +332,9 @@ Domain cores:
 - **`ordering/`** — the backup graph and its topological order (`graph.py`).
 - **`run/`** — the `nbkp run` pipeline (`pipeline.py`): preflight, then the
   syncs. Credential prefetch, mount and unmount wrap it from
-  `cliwiring/mount.py` (`managed_mount`).
+  `cliwiring/mount.py` (`managed_mount`). Its presentation, the results panel,
+  the abort message and `run -o json`, is in `output.py`, which `demo output`
+  renders too.
 - **`sh/`** — standalone script generation: per-sync facts (`spec.py`),
   preflight and sync steps (`preflight.py`, `steps.py`), shell quoting
   (`quoting.py`), and the `backup.sh.j2` template.
