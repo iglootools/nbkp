@@ -91,14 +91,13 @@ def _build_rsync_commands_section(
     config: Config,
     resolved_endpoints: ResolvedEndpoints,
 ) -> list[RenderableType]:
-    active_syncs = [ss for ss in sync_statuses.values() if ss.active]
-    if not active_syncs:
+    if not sync_statuses:
         return []
     table = Table(title=dry_run_table_title("Rsync commands:", dry_run=True))
     table.add_column("Sync", style="bold")
     table.add_column("Command")
 
-    for ss in active_syncs:
+    for ss in sync_statuses.values():
         dest_suffix, link_dest = _preview_rsync_target(ss, config)
         cmd = build_rsync_command(
             ss.config,
@@ -121,7 +120,6 @@ def _build_snapshot_commands_section(
     rows = [
         (ss.slug, preview)
         for ss in sync_statuses.values()
-        if ss.active
         for preview in [_snapshot_preview_commands(ss, config)]
         if preview is not None
     ]
@@ -145,9 +143,11 @@ def build_run_preview_sections(
     resolved_endpoints: ResolvedEndpoints,
 ) -> list[RenderableType]:
     """
-    Return the tables of the commands ``run`` would execute for the active syncs.
+    Return the tables of the commands ``run`` would execute for *sync_statuses*.
 
-    The rsync commands, then the snapshot commands; a table with no row is left out.
+    The caller passes the syncs the run attempts, which ``ignore-all`` widens
+    beyond the active ones (see ``PipelineResult.attempted_sync_statuses``). The
+    rsync commands, then the snapshot commands; a table with no row is left out.
     Shown by ``run --dry-run``, so each title carries the dry-run label.
     """
     return [

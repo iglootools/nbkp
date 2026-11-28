@@ -121,7 +121,7 @@ def _show_run_preview() -> None:
         "build_run_preview_sections",
         Group(
             *build_run_preview_sections(
-                preflight.sync_statuses,
+                {slug: s for slug, s in preflight.sync_statuses.items() if s.active},
                 config,
                 resolve_all_endpoints(config),
             ),

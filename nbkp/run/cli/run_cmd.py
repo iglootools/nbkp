@@ -411,7 +411,11 @@ def _results_panel(
         # The commands a real run would execute. The script sh generates has no
         # such preview: the script is itself the list of commands it runs.
         *(
-            build_run_preview_sections(pipeline.preflight.sync_statuses, cfg, resolved)
+            build_run_preview_sections(
+                pipeline.attempted_sync_statuses(),
+                cfg,
+                resolved,
+            )
             if dry_run
             else []
         ),
