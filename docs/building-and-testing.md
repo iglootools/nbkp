@@ -1,5 +1,10 @@
 # Building and Testing
 
+For contributors building, checking and testing nbkp: the mise tasks, the test
+suites and what CI runs. Set up the toolchain first with
+[Setup Development Environment](setup-development-environment.md); cutting a
+release is in [Releasing and Publishing](releasing-and-publishing.md).
+
 The unit tests cover the core logic of the tool. Integration and end-to-end
 tests exercise the real rsync/SSH/btrfs pipeline against Docker containers and
 local filesystems. See [Testing Strategy](#testing-strategy) for details on each

@@ -1,5 +1,9 @@
 # Releasing and Publishing
 
+For maintainers cutting a release: how the version is derived, which workflows
+tag, release and publish to PyPI, and how PyPI is configured. The checks a
+release relies on are in [Building and Testing](building-and-testing.md).
+
 The build uses the
 [uv-dynamic-versioning](https://github.com/ninoseki/uv-dynamic-versioning)
 hatchling plugin to automatically set the version based on git tags. It is
