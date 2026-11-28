@@ -1066,7 +1066,10 @@ mount lifecycle) run over Fabric/Paramiko. Within one `nbkp` invocation they
 share a single connection per endpoint and proxy chain: it is opened on first
 use and closed when the command ends, after unmounting. A reused connection
 found dead is replaced, and a command it failed to start is retried once on the
-new connection. rsync opens its own `ssh` process for each sync.
+new connection. A connection lost after the command started is never retried,
+since the command may have done its work; like a connection that fails to open,
+it is reported as an unreachable host, never as the command's answer. rsync
+opens its own `ssh` process for each sync.
 
 SSH arguments are constructed dynamically per endpoint. Common options:
 
