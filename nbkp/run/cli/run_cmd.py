@@ -60,7 +60,7 @@ from nbkp.sync.output import (
     build_run_preview_sections,
     sync_result_json,
 )
-from nbkp.theme import severity_style, severity_symbol
+from nbkp.theme import DRY_RUN_LABEL, severity_style, severity_symbol
 
 _ABORT_DETAIL_INDENT = 2
 
@@ -429,7 +429,11 @@ def _results_panel(
     ]
     return Panel(
         Group(*sections),
-        title="[bold]Sync Results[/bold]",
+        # A Text title: the dry-run label would parse as a markup tag.
+        title=Text(
+            f"{DRY_RUN_LABEL} Sync Results" if dry_run else "Sync Results",
+            style="bold",
+        ),
         border_style="cyan",
         padding=(0, 1),
     )

@@ -348,6 +348,8 @@ class TestRunCommand:
         assert exit_code == 0
         preview = output.index("[dry-run] Rsync commands:")
         assert preview < output.index("[dry-run] Sync results:")
+        # The panel holding them is a block of dry-run output too.
+        assert output.index("[dry-run] Sync Results") < preview
         assert "rsync " in output[preview:]
 
     def test_human_run_does_not_preview_the_commands(
