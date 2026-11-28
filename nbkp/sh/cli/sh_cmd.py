@@ -118,7 +118,16 @@ def sh_cmd(
         typer.echo(_format_volume_without_path(e), err=True)
         raise typer.Exit(1) from e
     if output_file is not None:
-        _write_script(output_file, script)
+        try:
+            _write_script(output_file, script)
+        except OSError as e:
+            typer.echo(
+                f"Error: cannot write {display_path(output_file)}:"
+                f" {e.strerror or e}. Make its directory writable, or pick"
+                " another --output-file.",
+                err=True,
+            )
+            raise typer.Exit(1) from e
         typer.echo(f"Written to {display_path(output_file)}", err=True)
     else:
         typer.echo(script)

@@ -44,6 +44,22 @@ class TestShCommand:
         assert mode & stat.S_IXUSR
         assert mode & stat.S_IXGRP
 
+    def test_unwritable_output_directory_is_reported(self, tmp_path: Path) -> None:
+        config_path = write_config(tmp_path, sample_config())
+        locked = tmp_path / "locked"
+        locked.mkdir(mode=0o500)
+        try:
+            result = runner.invoke(
+                app,
+                ["sh", "--config", str(config_path), "-o", str(locked / "backup.sh")],
+            )
+        finally:
+            locked.chmod(0o700)
+
+        assert result.exit_code == 1
+        assert "Error: cannot write" in result.stderr
+        assert result.exception is None or isinstance(result.exception, SystemExit)
+
     def test_output_file_reported_relative_to_cwd(
         self,
         tmp_path: Path,
