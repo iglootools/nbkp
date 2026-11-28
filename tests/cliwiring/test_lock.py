@@ -6,7 +6,6 @@ from pathlib import Path
 import pytest
 import typer
 
-from nbkp.clidisplay import OutputFormat
 from nbkp.cliwiring.lock import (
     RunLockError,
     RunLockErrorKind,
@@ -15,6 +14,7 @@ from nbkp.cliwiring.lock import (
     resolve_run_lock_path,
     run_lock_or_exit,
 )
+from nbkp.cliwiring.output_format import OutputFormat
 from tests.fakes import BodyError
 
 _HOME = Path("/home/alice")

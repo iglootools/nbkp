@@ -5,7 +5,6 @@ from typing import Annotated
 import typer
 from rich.console import Console
 
-from nbkp.clidisplay import OutputFormat, echo_json
 from nbkp.clidisplay.invocation import Invocation
 from nbkp.cliwiring.config import load_config_or_exit, resolve_endpoints
 from nbkp.cliwiring.mount import managed_mount
@@ -18,6 +17,7 @@ from nbkp.cliwiring.options import (
     OUTPUT_OPTION,
     UMOUNT_OPTION,
 )
+from nbkp.cliwiring.output_format import OutputFormat, echo_json
 from nbkp.cliwiring.preflight import check_all_with_progress
 from nbkp.cliwiring.runtime import runtime_of
 from nbkp.policy import Strictness

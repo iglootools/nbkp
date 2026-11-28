@@ -5,7 +5,6 @@ from nbkp.clidisplay.dryrun import (
     dry_run_labeled as dry_run_labeled,
     dry_run_table_title as dry_run_table_title,
 )
-from nbkp.clidisplay.output import OutputFormat as OutputFormat, echo_json as echo_json
 from nbkp.clidisplay.progress import StepProgressBar as StepProgressBar
 from nbkp.clidisplay.severity import (
     OK_STYLE as OK_STYLE,

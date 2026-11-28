@@ -2,7 +2,6 @@
 
 import typer
 
-from nbkp.clidisplay import OutputFormat
 from nbkp.cliwiring.config import load_config_or_exit, resolve_endpoints
 from nbkp.cliwiring.disks import probe_and_show_status, require_known_names
 from nbkp.cliwiring.options import (
@@ -12,6 +11,7 @@ from nbkp.cliwiring.options import (
     NETWORK_OPTION,
     OUTPUT_OPTION,
 )
+from nbkp.cliwiring.output_format import OutputFormat
 from nbkp.cliwiring.runtime import runtime_of
 from nbkp.disks.cli.options import NAME_OPTION
 

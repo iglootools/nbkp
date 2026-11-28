@@ -7,9 +7,10 @@ from rich.console import Console
 from rich.table import Table
 from rich.text import Text
 
-from nbkp.clidisplay import OutputFormat, echo_json, severity_style, severity_symbol
+from nbkp.clidisplay import severity_style, severity_symbol
 from nbkp.cliwiring.config import load_config_or_exit
 from nbkp.cliwiring.options import CONFIG_OPTION, OUTPUT_OPTION
+from nbkp.cliwiring.output_format import OutputFormat, echo_json
 from nbkp.cliwiring.runtime import runtime_of
 from nbkp.config import Config
 from nbkp.credentials import (

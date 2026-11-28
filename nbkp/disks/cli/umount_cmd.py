@@ -6,7 +6,6 @@ from typing import Annotated
 import typer
 from rich.console import Console
 
-from nbkp.clidisplay import OutputFormat
 from nbkp.clidisplay.invocation import Invocation, format_troubleshoot_hint
 from nbkp.cliwiring.config import load_config_or_exit, resolve_endpoints
 from nbkp.cliwiring.disks import probe_and_show_status, require_known_names, show_plan
@@ -19,6 +18,7 @@ from nbkp.cliwiring.options import (
     NETWORK_OPTION,
     OUTPUT_OPTION,
 )
+from nbkp.cliwiring.output_format import OutputFormat
 from nbkp.cliwiring.runtime import Runtime, runtime_of
 from nbkp.config import Config
 from nbkp.disks.cli.options import NAME_OPTION

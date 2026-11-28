@@ -10,7 +10,7 @@ from typing import Annotated
 
 import typer
 
-from nbkp.clidisplay import OutputFormat
+from nbkp.cliwiring.output_format import OutputFormat
 from nbkp.remote.endpoints import NetworkType
 
 CONFIG_OPTION = Annotated[

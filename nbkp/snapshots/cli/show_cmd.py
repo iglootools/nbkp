@@ -3,7 +3,6 @@
 import typer
 from rich.console import Console
 
-from nbkp.clidisplay import OutputFormat, echo_json
 from nbkp.cliwiring.options import (
     CONFIG_OPTION,
     EXCLUDE_LOCATION_OPTION,
@@ -14,6 +13,7 @@ from nbkp.cliwiring.options import (
     SYNC_OPTION,
     UMOUNT_OPTION,
 )
+from nbkp.cliwiring.output_format import OutputFormat, echo_json
 from nbkp.policy import Strictness
 from nbkp.snapshots import show_all_syncs
 from nbkp.snapshots.cli.operation import (
