@@ -132,8 +132,8 @@ If you need server-to-server replication:
 
 ## Known Limitations
 
-- No Windows support -- Haven't used it for decades, so no idea wether Cygwin is
-  still a thing, if WSL could work, or if there is a completely different
+- No Windows support -- Haven't used it for decades, so no idea whether Cygwin
+  is still a thing, if WSL could work, or if there is a completely different
   rsync-like ecosystem that's the preferred way of performing backups.
 - No cloud backends -- local and SSH only. Might explore
   [rclone](https://rclone.org/) integration down the road.
