@@ -17,6 +17,7 @@ import paramiko
 import pytest
 from rich.console import Console
 
+from nbkp.cliwiring.invocation import Invocation
 from nbkp.config import Config, LocalVolume, LuksEncryptionConfig, MountConfig
 from nbkp.preflight import (
     RemediationFacts,
@@ -108,6 +109,7 @@ class TestCleartextDeviceRendering:
     def test_fstab_fix_renders_the_gathered_device(self) -> None:
         vol = _volume()
         ctx = rem.TroubleshootContext(
+            invocation=Invocation(),
             config=Config(volumes={vol.slug: vol}),
             facts=RemediationFacts(cleartext_devices={vol.slug: _LABELLED}),
         )

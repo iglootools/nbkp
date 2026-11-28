@@ -13,12 +13,12 @@ from rich.status import Status
 from rich.text import Text
 
 from nbkp.clidisplay import severity_style, severity_symbol
-from nbkp.clidisplay.invocation import Invocation
 from nbkp.cliwiring.config import (
     load_config_or_exit,
     require_known_syncs,
     resolve_endpoints,
 )
+from nbkp.cliwiring.invocation import Invocation
 from nbkp.cliwiring.mount import format_umount_failures, managed_mount
 from nbkp.cliwiring.mount_progress import mount_display_names
 from nbkp.cliwiring.options import (

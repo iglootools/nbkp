@@ -10,7 +10,7 @@ from typing import Any, cast
 
 from rich.console import Console
 
-from nbkp.clidisplay.invocation import Invocation
+from nbkp.cliwiring.invocation import Invocation
 from nbkp.config import (
     Config,
     LocalVolume,
@@ -57,8 +57,7 @@ def _render(
             ssh or {},
             vol_statuses,
             {},
-            config,
-            context=ctx,
+            context=ctx or TroubleshootContext(config=config, invocation=Invocation()),
         ),
     )
     return buf.getvalue()
@@ -143,7 +142,12 @@ class TestSuggestedCommands:
             {},
             "alice",
         )
-        ctx = TroubleshootContext(config=config, local_user="alice", facts=facts)
+        ctx = TroubleshootContext(
+            invocation=Invocation(),
+            config=config,
+            local_user="alice",
+            facts=facts,
+        )
         out = _render(statuses, config, ctx)
         assert 'subject.user == "alice"' in out
         assert "nbkp disks setup-auth -u alice" in out
@@ -183,7 +187,7 @@ class TestWarnings:
         issues = collect_issues({"localhost": _warning_ssh_status()}, {}, {})
         data = troubleshoot_json(
             issues,
-            TroubleshootContext(config=Config()),
+            TroubleshootContext(invocation=Invocation(), config=Config()),
             has_fatal_errors=False,
         )
         [issue] = _json_issues(data)
@@ -204,7 +208,11 @@ class TestLatestSnapshotWritable:
         sync = troubleshoot_data(config).sync_statuses["latest-snapshot-writable"]
         return (
             collect_issues({}, {}, {sync.slug: sync}),
-            TroubleshootContext(config=config, facts=RemediationFacts()),
+            TroubleshootContext(
+                invocation=Invocation(),
+                config=config,
+                facts=RemediationFacts(),
+            ),
         )
 
     def test_fix_makes_the_snapshot_read_only_again(self) -> None:

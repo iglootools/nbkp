@@ -6,9 +6,9 @@ from typing import Annotated
 import typer
 from rich.console import Console
 
-from nbkp.clidisplay.invocation import Invocation, format_troubleshoot_hint
 from nbkp.cliwiring.config import load_config_or_exit, resolve_endpoints
 from nbkp.cliwiring.disks import probe_and_show_status, require_known_names, show_plan
+from nbkp.cliwiring.invocation import Invocation, format_troubleshoot_hint
 from nbkp.cliwiring.lock import run_lock_or_exit
 from nbkp.cliwiring.mount_progress import LifecycleProgress, mount_display_names
 from nbkp.cliwiring.options import (

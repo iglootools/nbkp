@@ -12,7 +12,7 @@ from functools import partial
 
 from rich.console import Console
 
-from nbkp.clidisplay.invocation import Invocation
+from nbkp.cliwiring.invocation import Invocation
 from nbkp.cliwiring.output_format import OutputFormat
 from nbkp.cliwiring.progress import StepProgressBar
 from nbkp.cliwiring.runtime import Runtime
@@ -105,7 +105,7 @@ def check_and_display(
     resolved_endpoints: ResolvedEndpoints,
     dry_run: bool = False,
     mount_observations: dict[str, MountObservation] | None = None,
-    invocation: Invocation | None = None,
+    invocation: Invocation,
     exclude_locations: Collection[str] = (),
     runtime: Runtime,
 ) -> tuple[PreflightResult, bool]:

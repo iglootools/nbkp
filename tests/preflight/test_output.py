@@ -4,6 +4,7 @@ from io import StringIO
 
 from rich.console import Console
 
+from nbkp.cliwiring.invocation import Invocation
 from nbkp.config import (
     BtrfsSnapshotConfig,
     Config,
@@ -25,7 +26,7 @@ from nbkp.preflight import (
     VolumeDiagnostics,
     VolumeStatus,
 )
-from nbkp.preflight.output import format_human_troubleshoot
+from nbkp.preflight.output import TroubleshootContext, format_human_troubleshoot
 from nbkp.preflight.output.check import format_human_check
 from nbkp.preflight.status.endpoint import LatestSymlinkState
 from nbkp.preflight.testkit import troubleshoot_config, troubleshoot_data
@@ -70,7 +71,7 @@ class TestTroubleshootBtrfsStagingNotFound:
                 _ssh_statuses_from(vol_statuses),
                 vol_statuses,
                 sync_statuses,
-                config,
+                context=TroubleshootContext(config=config, invocation=Invocation()),
             ),
         )
         output = buf.getvalue()
@@ -96,7 +97,7 @@ class TestTroubleshootBtrfsStagingNotFound:
                 _ssh_statuses_from(vol_statuses),
                 vol_statuses,
                 sync_statuses,
-                config,
+                context=TroubleshootContext(config=config, invocation=Invocation()),
             ),
         )
         output = buf.getvalue()
@@ -119,7 +120,7 @@ class TestTroubleshootBtrfsStagingNotFound:
                 _ssh_statuses_from(vol_statuses),
                 vol_statuses,
                 sync_statuses,
-                config,
+                context=TroubleshootContext(config=config, invocation=Invocation()),
             ),
         )
         output = buf.getvalue()
@@ -135,7 +136,7 @@ class TestTroubleshootBtrfsStagingNotFound:
                 _ssh_statuses_from(vol_statuses),
                 vol_statuses,
                 sync_statuses,
-                config,
+                context=TroubleshootContext(config=config, invocation=Invocation()),
             ),
         )
         output = buf.getvalue()
@@ -192,7 +193,7 @@ class TestTroubleshootBtrfsStagingNotFound:
                 _ssh_statuses_from(vol_statuses),
                 vol_statuses,
                 sync_statuses,
-                config,
+                context=TroubleshootContext(config=config, invocation=Invocation()),
             ),
         )
         output = buf.getvalue()
@@ -227,7 +228,7 @@ class TestTroubleshootStagingNotBtrfsSubvolume:
                 _ssh_statuses_from(vol_statuses),
                 vol_statuses,
                 sync_statuses,
-                config,
+                context=TroubleshootContext(config=config, invocation=Invocation()),
             ),
         )
         output = buf.getvalue()
@@ -255,7 +256,7 @@ class TestTroubleshootDryRunPendingSnapshot:
                 _ssh_statuses_from(vol_statuses),
                 vol_statuses,
                 sync_statuses,
-                config,
+                context=TroubleshootContext(config=config, invocation=Invocation()),
             ),
         )
         output = buf.getvalue()
@@ -305,7 +306,7 @@ class TestTroubleshootLocationExcluded:
                 _ssh_statuses_from(vol_statuses),
                 vol_statuses,
                 {},
-                config,
+                context=TroubleshootContext(config=config, invocation=Invocation()),
             ),
         )
         output = buf.getvalue()
@@ -329,6 +330,7 @@ def _check_output(
             config,
             strictness=strictness,
             wrap_in_panel=False,
+            invocation=Invocation(),
         ),
     )
     return buf.getvalue()
@@ -420,7 +422,14 @@ class TestCheckLatestSnapshotWritable:
         sync = troubleshoot_data(config).sync_statuses["latest-snapshot-writable"]
         buf = StringIO()
         Console(file=buf, highlight=False, markup=False, width=400).print(
-            format_human_check({}, {}, {sync.slug: sync}, config, wrap_in_panel=False),
+            format_human_check(
+                {},
+                {},
+                {sync.slug: sync},
+                config,
+                wrap_in_panel=False,
+                invocation=Invocation(),
+            ),
         )
         output = buf.getvalue()
         assert "the snapshot latest points to is not read-only" in output
@@ -461,6 +470,13 @@ class TestCheckSshEndpointsTable:
         )
         buf = StringIO()
         Console(file=buf, highlight=False, width=400).print(
-            format_human_check({}, {}, {}, config, wrap_in_panel=False),
+            format_human_check(
+                {},
+                {},
+                {},
+                config,
+                wrap_in_panel=False,
+                invocation=Invocation(),
+            ),
         )
         assert "home[lan], travel" in buf.getvalue()

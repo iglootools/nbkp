@@ -7,9 +7,9 @@ import typer
 from rich.console import Console
 from rich.text import Text
 
-from nbkp.clidisplay.invocation import Invocation, format_troubleshoot_hint
 from nbkp.cliwiring.config import load_config_or_exit, resolve_endpoints
 from nbkp.cliwiring.disks import require_known_names, show_plan, show_volume_statuses
+from nbkp.cliwiring.invocation import Invocation, format_troubleshoot_hint
 from nbkp.cliwiring.lock import run_lock_or_exit
 from nbkp.cliwiring.mount import lifecycle_session
 from nbkp.cliwiring.mount_progress import mount_display_names

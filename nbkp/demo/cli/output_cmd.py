@@ -12,6 +12,7 @@ from rich.console import Console, Group, RenderableType
 from rich.panel import Panel
 from rich.text import Text
 
+from nbkp.cliwiring.invocation import Invocation
 from nbkp.cliwiring.runtime import Runtime, runtime_of
 from nbkp.config import ConfigError, load_config
 from nbkp.config.output import format_config_error, format_human_config
@@ -108,6 +109,7 @@ def _show_check() -> None:
             config,
             resolved_endpoints=resolve_all_endpoints(config),
             wrap_in_panel=False,
+            invocation=Invocation(),
         ),
     )
 
@@ -176,6 +178,7 @@ def _show_troubleshoot(runtime: Runtime) -> None:
     )
     ctx = TroubleshootContext(
         config=config,
+        invocation=Invocation(),
         resolved_endpoints=resolve_all_endpoints(config),
     )
     facts = gather_remediation_facts(
@@ -191,7 +194,6 @@ def _show_troubleshoot(runtime: Runtime) -> None:
             preflight.ssh_endpoint_statuses,
             preflight.volume_statuses,
             preflight.sync_statuses,
-            config,
             context=replace(ctx, facts=facts),
         ),
     )

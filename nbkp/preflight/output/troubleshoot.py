@@ -15,7 +15,6 @@ from rich.console import Console, Group, RenderableType
 from rich.text import Text
 
 from nbkp.config import (
-    Config,
     SyncConfig,
 )
 from nbkp.policy import Strictness
@@ -51,7 +50,6 @@ from nbkp.preflight.status.ssh import (
 from nbkp.preflight.status.sync import SyncErrorKind, SyncStatus
 from nbkp.preflight.status.volume import VolumeErrorKind, VolumeStatus
 from nbkp.preflight.troubleshoot import Layer, TroubleshootIssue, collect_issues
-from nbkp.remote.endpoints import ResolvedEndpoints
 
 _HEADERS: dict[Layer, str] = {
     Layer.SSH_ENDPOINT: "SSH Endpoint",
@@ -168,10 +166,8 @@ def format_human_troubleshoot(
     ssh_statuses: dict[str, SshEndpointStatus],
     vol_statuses: dict[str, VolumeStatus],
     sync_statuses: dict[str, SyncStatus],
-    config: Config,
     *,
-    resolved_endpoints: ResolvedEndpoints | None = None,
-    context: TroubleshootContext | None = None,
+    context: TroubleshootContext,
     strictness: Strictness = Strictness.IGNORE_INACTIVE,
 ) -> RenderableType:
     """
@@ -180,13 +176,9 @@ def format_human_troubleshoot(
     *context* carries the invocation flags and local user used in suggested commands,
     and the facts gathered for the fixes.
     """
-    ctx = context or TroubleshootContext(
-        config=config,
-        resolved_endpoints=resolved_endpoints or {},
-    )
     issues = collect_issues(ssh_statuses, vol_statuses, sync_statuses, strictness)
     return (
-        format_issues(issues, ctx)
+        format_issues(issues, context)
         if issues
         else "No issues found. All volumes and syncs are active."
     )

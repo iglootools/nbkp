@@ -4,8 +4,8 @@ from typing import Annotated
 
 import typer
 
-from nbkp.clidisplay.invocation import Invocation
 from nbkp.cliwiring.config import load_config_or_exit, resolve_endpoints
+from nbkp.cliwiring.invocation import Invocation
 from nbkp.cliwiring.mount import managed_mount
 from nbkp.cliwiring.options import (
     CONFIG_OPTION,

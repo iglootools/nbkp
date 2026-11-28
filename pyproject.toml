@@ -239,7 +239,6 @@ ignore_imports = [
   "nbkp.**.output.** -> rich",
   "nbkp.**.output -> rich",
   "nbkp.**.output.** -> nbkp.clidisplay",
-  "nbkp.**.output.** -> nbkp.clidisplay.**",
   "nbkp.**.output -> nbkp.clidisplay",
 ]
 

@@ -14,12 +14,12 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
-from nbkp.clidisplay.invocation import Invocation, format_troubleshoot_hint
 from nbkp.cliwiring.config import (
     load_config_or_exit,
     require_known_syncs,
     resolve_endpoints,
 )
+from nbkp.cliwiring.invocation import Invocation, format_troubleshoot_hint
 from nbkp.cliwiring.mount import managed_mount
 from nbkp.cliwiring.output_format import OutputFormat
 from nbkp.cliwiring.preflight import check_all_with_progress

@@ -8,8 +8,8 @@ from typing import Annotated
 
 import typer
 
-from nbkp.clidisplay.invocation import display_path
 from nbkp.cliwiring.config import load_config_or_exit, resolve_endpoints
+from nbkp.cliwiring.invocation import display_path
 from nbkp.cliwiring.options import (
     CONFIG_OPTION,
     EXCLUDE_LOCATION_OPTION,

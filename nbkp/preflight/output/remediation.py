@@ -22,7 +22,6 @@ from rich.padding import Padding
 from rich.syntax import Syntax
 from rich.text import Text
 
-from nbkp.clidisplay.invocation import Invocation
 from nbkp.config import (
     DEFAULT_SSH_PORT,
     Config,
@@ -44,6 +43,7 @@ from nbkp.fsprotocol import (
     STAGING_DIR,
     VOLUME_SENTINEL,
 )
+from nbkp.preflight.output.commands import SuggestedCommands
 from nbkp.preflight.status.endpoint import (
     DestinationEndpointErrorKind,
     DestinationEndpointStatus,
@@ -85,11 +85,11 @@ class TroubleshootContext:
     """Everything the fixes need besides the error itself."""
 
     config: Config
+    invocation: SuggestedCommands
+    """Config path and endpoint flags, so suggested commands copy-paste."""
     resolved_endpoints: ResolvedEndpoints = field(
         default_factory=dict[str, ResolvedEndpoint],
     )
-    invocation: Invocation = field(default_factory=Invocation)
-    """Config path and endpoint flags, so suggested commands copy-paste."""
     local_user: str = "<user>"
     """User the polkit rule authorizes for local volumes (and remote ones
     whose SSH endpoint sets no user).  Supplied by the CLI."""

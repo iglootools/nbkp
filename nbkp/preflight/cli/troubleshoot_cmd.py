@@ -5,8 +5,8 @@ from typing import Annotated
 import typer
 from rich.console import Console
 
-from nbkp.clidisplay.invocation import Invocation
 from nbkp.cliwiring.config import load_config_or_exit, resolve_endpoints
+from nbkp.cliwiring.invocation import Invocation
 from nbkp.cliwiring.mount import managed_mount
 from nbkp.cliwiring.options import (
     CONFIG_OPTION,
@@ -132,7 +132,6 @@ def _report(
                     preflight.ssh_endpoint_statuses,
                     preflight.volume_statuses,
                     preflight.sync_statuses,
-                    ctx.config,
                     context=ctx,
                     strictness=strictness,
                 ),
