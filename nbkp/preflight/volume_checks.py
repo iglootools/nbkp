@@ -55,7 +55,7 @@ from nbkp.remote.errors import describe_error, is_auth_error, ssh_connection_err
 
 def observe_ssh_endpoint(
     volume: Volume,
-    resolved_endpoints: ResolvedEndpoints | None = None,
+    resolved_endpoints: ResolvedEndpoints,
     *,
     probe_mount_tools: bool = False,
     run: VolumeCommandRunner = run_on_volume,
@@ -71,7 +71,7 @@ def observe_ssh_endpoint(
     *probe_mount_tools* should be True when any volume on this host has
     mount config.
     """
-    resolved = resolved_endpoints or {}
+    resolved = resolved_endpoints
     match volume:
         case LocalVolume():
             return _observe_ssh_endpoint_local(
@@ -204,10 +204,10 @@ def _probe_host_tools(
 def observe_volume(
     volume: Volume,
     host_tools: HostToolCapabilities,
-    mount_tools: MountToolCapabilities | None = None,
-    resolved_endpoints: ResolvedEndpoints | None = None,
-    mount_observation: MountObservation | None = None,
     *,
+    resolved_endpoints: ResolvedEndpoints,
+    mount_tools: MountToolCapabilities | None = None,
+    mount_observation: MountObservation | None = None,
     platform: str,
     run: VolumeCommandRunner = run_on_volume,
 ) -> VolumeDiagnostics:
@@ -220,7 +220,7 @@ def observe_volume(
     *host_tools* and *mount_tools* come from the SSH endpoint observation;
     *platform* is the orchestrator's ``sys.platform``.
     """
-    resolved = resolved_endpoints or {}
+    resolved = resolved_endpoints
     sentinel_exists, sentinel_unreadable = _probe_volume_sentinel(
         volume,
         resolved,
@@ -230,9 +230,9 @@ def observe_volume(
         check_volume_capabilities(
             volume,
             host_tools,
-            mount_tools,
-            resolved,
-            mount_observation,
+            resolved_endpoints=resolved,
+            mount_tools=mount_tools,
+            mount_observation=mount_observation,
             platform=platform,
             run=run,
         )
@@ -288,10 +288,10 @@ def _volume_sentinel_exists(
 def check_volume_capabilities(
     volume: Volume,
     host_tools: HostToolCapabilities,
-    mount_tools: MountToolCapabilities | None = None,
-    resolved_endpoints: ResolvedEndpoints | None = None,
-    mount_observation: MountObservation | None = None,
     *,
+    resolved_endpoints: ResolvedEndpoints,
+    mount_tools: MountToolCapabilities | None = None,
+    mount_observation: MountObservation | None = None,
     platform: str,
     run: VolumeCommandRunner = run_on_volume,
 ) -> VolumeCapabilities:
@@ -304,7 +304,7 @@ def check_volume_capabilities(
     orchestrator's ``sys.platform``) decides how a local volume's filesystem
     type is probed.
     """
-    resolved = resolved_endpoints or {}
+    resolved = resolved_endpoints
     fs_type = (
         probe_filesystem_type(volume, resolved, platform=platform, run=run)
         if host_tools.has_stat

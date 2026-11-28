@@ -131,6 +131,7 @@ def _run_script(
         config,
         ScriptOptions(platform=sys.platform, config_path="test.yaml"),
         now=_NOW,
+        resolved_endpoints={},
     )
     script_path = tmp_path / "backup.sh"
     script_path.write_text(script, encoding="utf-8")
@@ -262,6 +263,7 @@ class TestGeneratedScriptSyntax:
             config,
             ScriptOptions(platform=sys.platform, config_path="t.yaml", portable=False),
             now=_NOW,
+            resolved_endpoints={},
         )
         result = subprocess.run(
             ["bash", "-n"],
@@ -284,6 +286,7 @@ class TestGeneratedScriptSyntax:
             config,
             ScriptOptions(platform=sys.platform, config_path="test.yaml"),
             now=_NOW,
+            resolved_endpoints={},
         )
         result = subprocess.run(
             ["/bin/bash", "-n"],

@@ -348,6 +348,7 @@ def _check_output(
             strictness=strictness,
             wrap_in_panel=False,
             invocation=Invocation(),
+            resolved_endpoints={},
         ),
     )
     return buf.getvalue()
@@ -446,6 +447,7 @@ class TestCheckLatestSnapshotWritable:
                 config,
                 wrap_in_panel=False,
                 invocation=Invocation(),
+                resolved_endpoints={},
             ),
         )
         output = buf.getvalue()
@@ -494,6 +496,7 @@ class TestCheckSshEndpointsTable:
                 config,
                 wrap_in_panel=False,
                 invocation=Invocation(),
+                resolved_endpoints={},
             ),
         )
         assert "home[lan], travel" in buf.getvalue()

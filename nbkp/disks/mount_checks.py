@@ -373,7 +373,7 @@ def _fstab_check(
 def check_mount_status(
     volume: Volume,
     mount: MountConfig,
-    resolved_endpoints: ResolvedEndpoints | None = None,
+    resolved_endpoints: ResolvedEndpoints,
     mount_tools: MountToolCapabilities | None = None,
     *,
     run: VolumeCommandRunner = run_on_volume,
@@ -390,6 +390,6 @@ def check_mount_status(
         volume,
         mount,
         mount_tools,
-        resolved_endpoints or {},
+        resolved_endpoints,
         run=run,
     )
