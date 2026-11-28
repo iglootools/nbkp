@@ -49,6 +49,7 @@ from nbkp.preflight.testkit.troubleshoot.scenario import (
 from nbkp.preflight.testkit.troubleshoot.ssh import BTRFS_HOST_TOOLS, nas_status
 
 _HEALTHY_SNAPSHOT_DIRS = SnapshotDirsDiagnostics(exists=True, writable=True)
+_LATEST_UNREADABLE = LatestSymlinkState(exists=True, unreadable="Permission denied")
 _LATEST_DEVNULL = LatestSymlinkState(exists=True, raw_target="/dev/null")
 _LATEST_DANGLING = LatestSymlinkState(
     exists=True,
@@ -371,6 +372,48 @@ DST_LATEST_INVALID = Scenario(
 )
 
 
+def _latest_unreadable_statuses(
+    config: Config,
+    shared: SharedStatuses,
+) -> ScenarioStatuses:
+    # LATEST_SYMLINK_UNREADABLE on both endpoints: the symlink is there, its
+    # target could not be read.
+    usb_latest = volume_status(
+        config,
+        "usb-latest-unreadable",
+        LOCALHOST_SSH_STATUS,
+        healthy_caps(),
+    )
+    return ScenarioStatuses(
+        volumes=(usb_latest,),
+        syncs=(
+            SyncStatus(
+                slug="latest-unreadable",
+                config=config.syncs["latest-unreadable"],
+                source_endpoint_status=_snapshot_source_status(
+                    shared,
+                    "src-latest-unreadable",
+                    _LATEST_UNREADABLE,
+                    [SourceEndpointErrorKind.LATEST_SYMLINK_UNREADABLE],
+                ),
+                destination_endpoint_status=DestinationEndpointStatus(
+                    endpoint_slug="dst-latest-unreadable",
+                    volume_status=usb_latest,
+                    diagnostics=DestinationEndpointDiagnostics(
+                        endpoint_slug="dst-latest-unreadable",
+                        sentinel_exists=True,
+                        endpoint_writable=True,
+                        snapshot_dirs=_HEALTHY_SNAPSHOT_DIRS,
+                        latest=_LATEST_UNREADABLE,
+                    ),
+                    errors=[DestinationEndpointErrorKind.LATEST_SYMLINK_UNREADABLE],
+                ),
+                errors=list(BOTH_ENDPOINTS_INACTIVE),
+            ),
+        ),
+    )
+
+
 def _snapshot_source_status(
     shared: SharedStatuses,
     endpoint_slug: str,
@@ -596,4 +639,23 @@ LATEST_SNAPSHOT_WRITABLE = Scenario(
         ),
     ),
     syncs=(sync_from_laptop("latest-snapshot-writable", "dst-latest-writable"),),
+)
+
+
+LATEST_UNREADABLE = Scenario(
+    statuses=_latest_unreadable_statuses,
+    volumes=(
+        LocalVolume(slug="usb-latest-unreadable", path="/mnt/usb-latest-unreadable"),
+    ),
+    sync_endpoints=(
+        _hard_link_endpoint("src-latest-unreadable", "usb-drive", "unreadable-latest"),
+        _hard_link_endpoint("dst-latest-unreadable", "usb-latest-unreadable"),
+    ),
+    syncs=(
+        SyncConfig(
+            slug="latest-unreadable",
+            source="src-latest-unreadable",
+            destination="dst-latest-unreadable",
+        ),
+    ),
 )

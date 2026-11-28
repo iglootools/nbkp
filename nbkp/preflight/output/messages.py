@@ -100,6 +100,9 @@ _SOURCE_ENDPOINT: dict[SourceEndpointErrorKind, str] = {
     SourceEndpointErrorKind.LATEST_SYMLINK_INVALID: (
         f"{LATEST_LINK} symlink target is invalid"
     ),
+    SourceEndpointErrorKind.LATEST_SYMLINK_UNREADABLE: (
+        f"{LATEST_LINK} symlink exists but cannot be read"
+    ),
     SourceEndpointErrorKind.VOLUME_INACTIVE: "volume inactive",
 }
 
@@ -122,6 +125,9 @@ _DESTINATION_ENDPOINT: dict[DestinationEndpointErrorKind, str] = {
     ),
     DestinationEndpointErrorKind.LATEST_SYMLINK_INVALID: (
         f"{LATEST_LINK} symlink target is invalid"
+    ),
+    DestinationEndpointErrorKind.LATEST_SYMLINK_UNREADABLE: (
+        f"{LATEST_LINK} symlink exists but cannot be read"
     ),
     DestinationEndpointErrorKind.STAGING_SUBVOL_NOT_FOUND: (
         f"{STAGING_DIR}/ directory not found"

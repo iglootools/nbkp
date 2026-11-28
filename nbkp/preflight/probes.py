@@ -219,20 +219,6 @@ def read_symlink(
             return _read_remote_symlink(volume, path, resolved_endpoints, run)
 
 
-def read_symlink_target(
-    volume: Volume,
-    path: str,
-    resolved_endpoints: ResolvedEndpoints,
-    *,
-    run: VolumeCommandRunner = run_on_volume,
-) -> str | None:
-    """Read a symlink target, returning None if it is absent or unreadable."""
-    try:
-        return read_symlink(volume, path, resolved_endpoints, run=run)
-    except VolumeReadError:
-        return None
-
-
 _MIN_RSYNC_VERSION = (3, 0, 0)
 
 _GNU_RSYNC_RE = re.compile(r"rsync\s+version\s+(\d+)\.(\d+)\.(\d+)")

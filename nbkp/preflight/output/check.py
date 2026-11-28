@@ -42,16 +42,24 @@ def _format_latest(
     *,
     not_found: SourceEndpointErrorKind | DestinationEndpointErrorKind,
     invalid: SourceEndpointErrorKind | DestinationEndpointErrorKind,
+    unreadable: SourceEndpointErrorKind | DestinationEndpointErrorKind,
     strictness: Strictness,
 ) -> Text:
     """
     Format the ``latest`` symlink item.
 
     A missing ``latest`` is classified as *not_found*, one pointing at no snapshot as
-    *invalid*, under *strictness*: an error under the standard modes, a warning under
-    ``ignore-all``.
+    *invalid*, one that could not be read as *unreadable*, under *strictness*: an
+    error under the standard modes, a warning under ``ignore-all``.
     """
     match latest:
+        case LatestSymlinkState(unreadable=str()):
+            return check(
+                ok=False,
+                label="latest",
+                fail_error=unreadable,
+                strictness=strictness,
+            )
         case LatestSymlinkState(exists=True, raw_target=str() as target) if (
             target == DEVNULL_TARGET or latest.target_valid is True
         ):
@@ -120,6 +128,7 @@ def _format_source_diagnostics(ss: SyncStatus, strictness: Strictness) -> Text:
                     diag.latest,
                     not_found=SourceEndpointErrorKind.LATEST_SYMLINK_NOT_FOUND,
                     invalid=SourceEndpointErrorKind.LATEST_SYMLINK_INVALID,
+                    unreadable=SourceEndpointErrorKind.LATEST_SYMLINK_UNREADABLE,
                     strictness=strictness,
                 ),
             ]
@@ -218,6 +227,7 @@ def _destination_snapshot_items(
                     diag.latest,
                     not_found=DestinationEndpointErrorKind.LATEST_SYMLINK_NOT_FOUND,
                     invalid=DestinationEndpointErrorKind.LATEST_SYMLINK_INVALID,
+                    unreadable=DestinationEndpointErrorKind.LATEST_SYMLINK_UNREADABLE,
                     strictness=strictness,
                 ),
             ]

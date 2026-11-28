@@ -25,7 +25,7 @@ from nbkp.preflight.probes import (
     check_directory_writable,
     check_endpoint_sentinel,
     check_symlink_exists,
-    read_symlink_target,
+    read_symlink,
 )
 from nbkp.preflight.snapshot_checks import check_btrfs_subvolume, probe_btrfs_readonly
 from nbkp.preflight.status.endpoint import (
@@ -239,7 +239,10 @@ def _read_latest_state(
     if not check_symlink_exists(volume, latest_path, resolved_endpoints, run=run):
         return LatestSymlinkState(exists=False)
 
-    raw_target = read_symlink_target(volume, latest_path, resolved_endpoints, run=run)
+    try:
+        raw_target = read_symlink(volume, latest_path, resolved_endpoints, run=run)
+    except VolumeReadError as e:
+        return LatestSymlinkState(exists=True, unreadable=e.detail or "cannot read")
     match raw_target:
         case None:
             return LatestSymlinkState(exists=False)

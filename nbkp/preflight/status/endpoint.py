@@ -24,6 +24,7 @@ class SourceEndpointErrorKind(enum.StrEnum):
     SNAPSHOTS_DIR_NOT_FOUND = "snapshots-dir-not-found"
     LATEST_SYMLINK_NOT_FOUND = "latest-symlink-not-found"
     LATEST_SYMLINK_INVALID = "latest-symlink-invalid"
+    LATEST_SYMLINK_UNREADABLE = "latest-symlink-unreadable"
 
     # Cascade — lower layer inactive
     VOLUME_INACTIVE = "volume-inactive"
@@ -55,6 +56,7 @@ class DestinationEndpointErrorKind(enum.StrEnum):
     SNAPSHOTS_DIR_NOT_WRITABLE = "snapshots-dir-not-writable"
     LATEST_SYMLINK_NOT_FOUND = "latest-symlink-not-found"
     LATEST_SYMLINK_INVALID = "latest-symlink-invalid"
+    LATEST_SYMLINK_UNREADABLE = "latest-symlink-unreadable"
     STAGING_SUBVOL_NOT_FOUND = "staging-subvol-not-found"
     STAGING_NOT_BTRFS_SUBVOLUME = "staging-not-btrfs-subvolume"
     STAGING_SUBVOL_NOT_WRITABLE = "staging-subvol-not-writable"
@@ -105,12 +107,16 @@ class LatestSymlinkState(BaseModel):
     exists: bool
     raw_target: str | None = None
     """Raw readlink value.  ``/dev/null``, a relative path, or ``None``
-    when the symlink is absent or unreadable."""
+    when the symlink is absent or unreadable (see ``unreadable``)."""
     target_valid: bool | None = None
     """Whether the target is an existing directory named like a snapshot.
     ``None`` when there is no symlink or target is ``/dev/null``."""
     snapshot: Snapshot | None = None
     """``None`` when target is ``/dev/null``, invalid, or absent."""
+    unreadable: str | None = None
+    """Why an existing symlink's target could not be read, or ``None`` when it
+    was read (or there is no symlink).  Unreadable is never "absent": the
+    symlink is there, so ``exists`` stays ``True``."""
 
 
 class BtrfsStagingSubvolumeDiagnostics(BaseModel):
@@ -346,6 +352,8 @@ def _source_latest_ep_errors(
     latest = diag.latest
     if latest is None or not latest.exists:
         return [SourceEndpointErrorKind.LATEST_SYMLINK_NOT_FOUND]
+    elif latest.unreadable is not None:
+        return [SourceEndpointErrorKind.LATEST_SYMLINK_UNREADABLE]
     elif latest.raw_target == DEVNULL_TARGET:
         # /dev/null is structurally valid — interpretation deferred to sync
         return []
@@ -530,6 +538,8 @@ def _destination_latest_ep_errors(
     latest = diag.latest
     if latest is None or not latest.exists:
         return [DestinationEndpointErrorKind.LATEST_SYMLINK_NOT_FOUND]
+    elif latest.unreadable is not None:
+        return [DestinationEndpointErrorKind.LATEST_SYMLINK_UNREADABLE]
     elif latest.target_valid is False:
         return [DestinationEndpointErrorKind.LATEST_SYMLINK_INVALID]
     else:

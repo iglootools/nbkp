@@ -211,6 +211,34 @@ def _sentinel_unreadable_fix(
     ]
 
 
+def _latest_unreadable_fix(
+    vol: LocalVolume | RemoteVolume,
+    path: str,
+    ctx: TroubleshootContext,
+) -> Lines:
+    """
+    Explain a ``latest`` symlink that is there but could not be read.
+
+    Not a missing one: resetting it blindly could point it away from the
+    snapshot it names, so the fix starts by looking at it.
+    """
+    latest = f"{path}/{LATEST_LINK}"
+    return [
+        format_line(
+            FIX,
+            "The ",
+            latest,
+            " symlink exists but its target could not be read. Inspect it:",
+        ),
+        format_command(wrap_cmd(["ls", "-l", latest], vol, ctx.resolved_endpoints)),
+        format_line(
+            FIX,
+            "Then make it readable by the user nbkp runs as, or replace it"
+            " with a symlink to the newest snapshot.",
+        ),
+    ]
+
+
 _NEWEST_SNAPSHOT_PLACEHOLDER = "<newest-snapshot>"
 
 
@@ -966,6 +994,8 @@ def format_source_endpoint_error_fix(
             return _sentinel_fix(src_vol, path, SOURCE_SENTINEL, ctx)
         case SourceEndpointErrorKind.SENTINEL_UNREADABLE:
             return _sentinel_unreadable_fix(src_vol, path, SOURCE_SENTINEL, ctx)
+        case SourceEndpointErrorKind.LATEST_SYMLINK_UNREADABLE:
+            return _latest_unreadable_fix(src_vol, path, ctx)
         case SourceEndpointErrorKind.LATEST_SYMLINK_NOT_FOUND:
             return [
                 format_line(
@@ -1014,6 +1044,7 @@ def format_destination_endpoint_error_fix(
             | DestinationEndpointErrorKind.SNAPSHOTS_DIR_NOT_WRITABLE
             | DestinationEndpointErrorKind.LATEST_SYMLINK_NOT_FOUND
             | DestinationEndpointErrorKind.LATEST_SYMLINK_INVALID
+            | DestinationEndpointErrorKind.LATEST_SYMLINK_UNREADABLE
             | DestinationEndpointErrorKind.VOLUME_INACTIVE
         ):
             return _destination_layout_fix(error, dst_vol, path, dst_ep.slug, ctx)
@@ -1122,6 +1153,8 @@ def _destination_layout_fix(
                 ),
                 *_reset_latest(vol, path, endpoint_slug, ctx),
             ]
+        case DestinationEndpointErrorKind.LATEST_SYMLINK_UNREADABLE:
+            return _latest_unreadable_fix(vol, path, ctx)
         case _:
             return [format_line(FIX, "Fix the volume errors reported above.")]
 

@@ -8,7 +8,7 @@ from nbkp.config import (
     SshEndpoint,
     Volume,
 )
-from nbkp.preflight.probes import check_directory_exists, read_symlink_target
+from nbkp.preflight.probes import check_directory_exists, read_symlink
 from nbkp.preflight.snapshot_checks import check_btrfs_subvolume
 from nbkp.remote.dispatch import run_on_volume
 from nbkp.remote.endpoints import ResolvedEndpoints
@@ -148,7 +148,7 @@ def assert_chain_results(
     assert_trees_equal(src, local_hl / "latest", exclude_dirs={"excluded"})
 
     # Btrfs dest (step-3): snapshot + latest symlink
-    btrfs_link_target = read_symlink_target(
+    btrfs_link_target = read_symlink(
         btrfs_vol,
         f"{btrfs_vol.path}/latest",
         resolved,
@@ -171,7 +171,7 @@ def assert_chain_results(
     )
 
     # HL dest (step-5): latest symlink on remote-hl
-    hl_link_target = read_symlink_target(
+    hl_link_target = read_symlink(
         hl_vol,
         f"{REMOTE_BACKUP_PATH}/hl/latest",
         resolved,
