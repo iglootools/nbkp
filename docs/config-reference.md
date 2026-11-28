@@ -215,7 +215,9 @@ output). Add a new host once with `ssh <host> true`, after checking the
 fingerprint it shows against the host's own
 (`ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` on the host), or with
 `ssh-keyscan` when the fingerprint is checked another way. With
-`strict-host-key-checking: false`, any key is accepted and recorded. Setting
+`strict-host-key-checking: false`, any key is accepted. OpenSSH, behind rsync,
+records a new key in the known-hosts file; nbkp's own checks accept it for the
+run without recording it. Setting
 `strict-host-key-checking: false` together with `known-hosts-file: /dev/null`
 fully disables host key verification and persistence, which suits ephemeral
 hosts whose keys change on reprovisioning. `key` and `known-hosts-file` are
