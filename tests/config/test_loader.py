@@ -210,6 +210,43 @@ class TestLoadConfig:
             load_config(str(p))
         assert excinfo.value.kind == ConfigErrorKind.UNREADABLE
 
+    def test_duplicate_sync_key_is_invalid_yaml(self, tmp_path: Path) -> None:
+        p = tmp_path / "config.yaml"
+        p.write_text(
+            dedent("""\
+                syncs:
+                  photos: {source: a, destination: b}
+                  photos: {source: a, destination: c}
+            """),
+        )
+        with pytest.raises(ConfigError) as excinfo:
+            load_config(str(p))
+        assert excinfo.value.kind == ConfigErrorKind.INVALID_YAML
+        assert "duplicate key 'photos'" in str(excinfo.value.detail)
+        assert "line 3" in str(excinfo.value.detail)
+
+    def test_duplicate_top_level_section_is_invalid_yaml(self, tmp_path: Path) -> None:
+        p = tmp_path / "config.yaml"
+        p.write_text("syncs: {}\nsyncs: {}\n")
+        with pytest.raises(ConfigError) as excinfo:
+            load_config(str(p))
+        assert excinfo.value.kind == ConfigErrorKind.INVALID_YAML
+        assert "duplicate key 'syncs'" in str(excinfo.value.detail)
+
+    def test_merge_key_may_be_overridden(self, tmp_path: Path) -> None:
+        p = tmp_path / "config.yaml"
+        p.write_text(
+            dedent("""\
+                volumes:
+                  a: &vol {type: local, path: /a}
+                  b:
+                    <<: *vol
+                    path: /b
+            """),
+        )
+        cfg = load_config(str(p))
+        assert cfg.volumes["b"].path == "/b"
+
     def test_not_a_mapping(self, tmp_path: Path) -> None:
         p = tmp_path / "list.yaml"
         p.write_text("- item1\n- item2\n")

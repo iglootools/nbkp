@@ -5,6 +5,7 @@ import stat
 from collections.abc import Callable, Mapping
 from enum import StrEnum
 from pathlib import Path
+from typing import Any
 
 import yaml
 from platformdirs import site_config_dir, user_config_dir
@@ -58,6 +59,59 @@ class ConfigError(Exception):
         super().__init__(
             ": ".join(str(part) for part in (kind, path, detail) if part is not None),
         )
+
+
+class _DuplicateKeyError(yaml.constructor.ConstructorError):
+    """A key repeated within one YAML mapping, with the marks of both."""
+
+    def __init__(self, mapping: yaml.MappingNode, key: yaml.ScalarNode) -> None:
+        """Point at the mapping and at the repeated key."""
+        super().__init__(
+            "while constructing a mapping",
+            mapping.start_mark,
+            f"found duplicate key {key.value!r}",
+            key.start_mark,
+        )
+
+
+class _UniqueKeyLoader(yaml.SafeLoader):
+    """
+    A ``SafeLoader`` that rejects a key repeated in one mapping.
+
+    PyYAML keeps only the last value of a repeated key, so a copy-pasted sync
+    whose key was not renamed, or a second ``syncs:`` block, would silently
+    replace the first and its backup would never run. Keys a ``<<`` merge
+    brings in may still be overridden, as YAML intends.
+    """
+
+    def construct_mapping(
+        self,
+        node: yaml.MappingNode,
+        deep: bool = False,  # noqa: FBT001, FBT002 -- PyYAML's signature
+    ) -> dict[Any, Any]:
+        """Raise ``ConstructorError`` on a repeated key, else build the mapping."""
+        scalar_keys = [
+            key_node
+            for key_node, _ in node.value
+            if isinstance(key_node, yaml.ScalarNode)
+            and key_node.tag != "tag:yaml.org,2002:merge"
+        ]
+        duplicate = next(
+            (
+                key_node
+                for i, key_node in enumerate(scalar_keys)
+                if any(
+                    (key_node.tag, key_node.value) == (earlier.tag, earlier.value)
+                    for earlier in scalar_keys[:i]
+                )
+            ),
+            None,
+        )
+        match duplicate:
+            case yaml.ScalarNode() as key_node:
+                raise _DuplicateKeyError(node, key_node)
+            case _:
+                return super().construct_mapping(node, deep=deep)
 
 
 def _xdg_config_home(environ: Mapping[str, str], home: Path) -> Path:
@@ -170,7 +224,8 @@ def load_config(
     Load and validate the config file.
 
     Raises ``ConfigError`` when the file is missing or unreadable, is not a YAML
-    mapping, or fails validation; ``kind`` says which.
+    mapping (a key repeated within one mapping counts as invalid YAML), or
+    fails validation; ``kind`` says which.
     """
     path = find_config_file(
         config_path,
@@ -181,7 +236,7 @@ def load_config(
     )
     try:
         with Path(path).open(encoding="utf-8") as f:
-            raw = yaml.safe_load(f)
+            raw = yaml.load(f, Loader=_UniqueKeyLoader)  # noqa: S506 -- a SafeLoader subclass
     except OSError as e:
         raise ConfigError(
             ConfigErrorKind.UNREADABLE,
